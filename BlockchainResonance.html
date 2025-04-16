@@ -1,0 +1,1895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain Resonance</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #artwork-container {
+            position: relative;
+            width: 576px;
+            height: 576px;
+            max-width: 100vmin;
+            max-height: 100vmin;
+        }
+        
+        #portrait-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        #effect-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+        
+        #particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            pointer-events: none;
+        }
+        
+        #info-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-family: monospace;
+            font-size: 12px;
+            border-radius: 5px;
+            z-index: 4;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .info-visible {
+            opacity: 1 !important;
+        }
+        
+        .info-hidden {
+            opacity: 0 !important;
+        }
+        
+        
+        
+        .portrait-feature {
+            transition: filter 1s ease;
+        }
+        
+        .portrait-background {
+            transition: filter 1s ease, fill 1s ease;
+        }
+        
+        @keyframes pulseOpacity {
+            0% { opacity: 0.2; }
+            50% { opacity: 0.8; }
+            100% { opacity: 0.2; }
+        }
+        
+        @keyframes colorPulse {
+            0% { filter: hue-rotate(0deg); }
+            50% { filter: hue-rotate(30deg); }
+            100% { filter: hue-rotate(0deg); }
+        }
+        
+        .pulse-animation {
+            animation: pulseOpacity 3s infinite;
+        }
+        
+        .color-pulse {
+            animation: colorPulse 5s infinite;
+        }
+        
+        .sequential-fade {
+            opacity: 0;
+            animation: sequentialFade 5s forwards;
+        }
+        
+        @keyframes sequentialFade {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        
+        .particle {
+            position: absolute;
+            background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="artwork-container">
+        <div id="portrait-svg"></div>
+        <canvas id="effect-canvas"></canvas>
+        <canvas id="particle-canvas"></canvas>
+        <div id="info-overlay"></div>
+    </div>
+
+    <script>
+        // Constants
+        const CANVAS_SIZE = 576;
+        const SVG_VIEWBOX_SIZE = 512; // The portrait SVG's viewBox size
+        const SVG_TO_CANVAS_RATIO = CANVAS_SIZE / SVG_VIEWBOX_SIZE;
+        const THIRD_EYE_X = 299.24;
+        const THIRD_EYE_Y = 194.4;
+        const SVG_THIRD_EYE_X = THIRD_EYE_X / SVG_TO_CANVAS_RATIO;
+        const SVG_THIRD_EYE_Y = THIRD_EYE_Y / SVG_TO_CANVAS_RATIO;
+        const SAT_NUMBER = 1430463027316;
+        const PORTRAIT_INSCRIPTION_ID = '869585a3af3c74eec7549421cdb62cb172cbf9e5194f14a207e60c8dd683f1bei0';
+        const CURRENT_INSCRIPTION_ID = window.location.pathname.split('/').pop();
+        const UPDATE_INTERVAL = 60000; // 60 seconds
+
+        
+        
+        // State variables
+        let blockData = {
+            height: 0,
+            hash: '',
+            merkleRoot: '',
+            time: 0,
+            transactionCount: 0,
+            feeRatePercentiles: [1, 2, 5, 10, 20]
+        };
+        
+        let colors = {
+            base: '#4A154B',    // Default deep purple
+            accent1: '#B4DC7F', // Default lime
+            accent2: '#DC7F7F'  // Default coral
+        };
+        
+        let effectState = {
+            dissolveLevel: 0,
+            pressureLevel: 0,
+            frequency: 0.5,
+            amplitude: 2,
+            lastBlockTime: 0,
+            relatedInscriptions: [],
+            particles: []
+        };
+        
+        let portraitElements = {
+            features: [], // black paths
+            background: [] // red paths
+        };
+        
+        let svgFilters;
+        let animationFrame;
+        let isPortraitLoaded = false;
+        let particleSystem;
+
+        // Function to convert canvas coordinates to SVG coordinates
+        function canvasToSvgCoords(x, y) {
+            return {
+                x: x / SVG_TO_CANVAS_RATIO,
+                y: y / SVG_TO_CANVAS_RATIO
+            };
+        }
+
+        // Function to convert SVG coordinates to canvas coordinates
+        function svgToCanvasCoords(x, y) {
+            return {
+                x: x * SVG_TO_CANVAS_RATIO,
+                y: y * SVG_TO_CANVAS_RATIO
+            };
+        }
+        
+        // Initialize everything
+        async function init() {
+            // Set up canvas
+            const canvas = document.getElementById('effect-canvas');
+            canvas.width = CANVAS_SIZE;
+            canvas.height = CANVAS_SIZE;
+            
+            const particleCanvas = document.getElementById('particle-canvas');
+            particleCanvas.width = CANVAS_SIZE;
+            particleCanvas.height = CANVAS_SIZE;
+            
+            // Load portrait SVG
+            await loadPortraitSVG();
+            
+            // Initialize effect canvas
+            initEffectCanvas();
+            
+            // Initialize particle system
+            initParticleSystem();
+            
+            // Fetch initial blockchain data
+            await fetchBlockchainData();
+            
+            // Initialize effects based on blockchain data
+            initEffects();
+
+            initializeUIChanges();
+            
+            // Set up event listeners for responsive design
+            setupEventListeners();
+            
+            // Start animation loop
+            startAnimationLoop();
+            
+            // Set up periodic data updates
+            setInterval(fetchBlockchainData, UPDATE_INTERVAL);
+        }
+        
+        // Load portrait SVG from inscription
+        async function loadPortraitSVG() {
+            try {
+                const response = await fetch(`/content/${PORTRAIT_INSCRIPTION_ID}`);
+                const svgContent = await response.text();
+                
+                // Insert SVG into portrait container
+                const portraitContainer = document.getElementById('portrait-svg');
+                portraitContainer.innerHTML = svgContent;
+                
+                // Get the SVG element
+                const svgElement = portraitContainer.querySelector('svg');
+                svgElement.style.width = '100%';
+                svgElement.style.height = '100%';
+                
+                // Identify black and red path elements
+                const pathElements = Array.from(svgElement.querySelectorAll('path'));
+                
+                // Group elements by fill color
+                portraitElements.features = pathElements.filter(path => {
+                    const fill = path.getAttribute('fill');
+                    return fill === '#010101' || fill === '#050303' || fill === '#060304';
+                });
+                
+                portraitElements.background = pathElements.filter(path => {
+                    const fill = path.getAttribute('fill');
+                    return fill === '#FE5B5C' || fill === '#F95859' || fill === '#F75557';
+                });
+                
+                // Create and append essential SVG elements
+                createEnhancedSVGStructure(svgElement);
+                
+                // Mark portrait as loaded
+                isPortraitLoaded = true;
+                
+            } catch (error) {
+                console.error('Error loading portrait SVG:', error);
+            }
+        }
+        
+        // Create enhanced SVG structure with groups and filters
+        function createEnhancedSVGStructure(svgElement) {
+            // Create defs section if it doesn't exist
+            let defs = svgElement.querySelector('defs');
+            if (!defs) {
+                defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                svgElement.appendChild(defs);
+            }
+            
+            // Create filter definitions
+            createSVGFilters(defs);
+            
+            // Create grouping elements
+            const featuresGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            featuresGroup.id = 'portrait-features';
+            featuresGroup.classList.add('portrait-feature');
+            
+            const backgroundGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            backgroundGroup.id = 'portrait-background';
+            backgroundGroup.classList.add('portrait-background');
+            
+            // Create mask for sequential reveal
+            const revealMask = document.createElementNS('http://www.w3.org/2000/svg', 'mask');
+            revealMask.id = 'sequential-reveal-mask';
+            
+            const maskRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            maskRect.setAttribute('width', '100%');
+            maskRect.setAttribute('height', '100%');
+            maskRect.setAttribute('fill', 'white');
+            
+            revealMask.appendChild(maskRect);
+            defs.appendChild(revealMask);
+            
+            // Move elements to their respective groups with sequential animation delay
+            portraitElements.features.forEach((element, index) => {
+                const clone = element.cloneNode(true);
+                
+                // Add unique ID for targeting
+                clone.id = `feature-${index}`;
+                
+                // Add animation delay based on index
+                const delay = index * 50;
+                clone.style.opacity = '0';
+                clone.style.animation = `sequentialFade 1.5s forwards ${delay}ms`;
+                
+                // Store original position for particle generation
+                const bbox = element.getBBox();
+                clone.dataset.centerX = bbox.x + bbox.width / 2;
+                clone.dataset.centerY = bbox.y + bbox.height / 2;
+                
+                featuresGroup.appendChild(clone);
+                element.remove();
+            });
+            
+            portraitElements.background.forEach((element, index) => {
+                const clone = element.cloneNode(true);
+                
+                // Add unique ID for targeting
+                clone.id = `background-${index}`;
+                
+                // Add subtle animation
+                const delay = index * 30;
+                clone.style.opacity = '0';
+                clone.style.animation = `sequentialFade 2s forwards ${delay}ms`;
+                
+                backgroundGroup.appendChild(clone);
+                element.remove();
+            });
+            
+            // Add groups to SVG
+            svgElement.appendChild(backgroundGroup);
+            svgElement.appendChild(featuresGroup);
+            
+            // Create third eye focus point
+            createThirdEyeElement(svgElement);
+            // Create sat number visualization
+            createSatNumberVisualization(svgElement);
+        }
+        
+        // Create third eye element with enhanced effects
+        // Use this updated function for creating the third eye element
+function createThirdEyeElement(svgElement) {
+    // Ensure the SVG has the correct viewBox
+    svgElement.setAttribute('viewBox', `0 0 ${SVG_VIEWBOX_SIZE} ${SVG_VIEWBOX_SIZE}`);
+    svgElement.setAttribute('width', '100%');
+    svgElement.setAttribute('height', '100%');
+    svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    
+    // Create a group for the third eye elements
+    const thirdEyeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    thirdEyeGroup.id = 'third-eye-group';
+    
+    // Create the main focus point - using the adjusted coordinates
+    const focusPoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    focusPoint.id = 'third-eye-point';
+    focusPoint.setAttribute('cx', SVG_THIRD_EYE_X);
+    focusPoint.setAttribute('cy', SVG_THIRD_EYE_Y);
+    focusPoint.setAttribute('r', '4');
+    focusPoint.setAttribute('fill', 'transparent');
+    focusPoint.setAttribute('stroke', colors.accent2);
+    focusPoint.setAttribute('stroke-width', '2');
+    focusPoint.setAttribute('filter', 'url(#pulseFilter)');
+    
+    // Add pulsing animation
+    const animateRadius = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+    animateRadius.setAttribute('attributeName', 'r');
+    animateRadius.setAttribute('values', '4;8;4');
+    animateRadius.setAttribute('dur', '4s');
+    animateRadius.setAttribute('repeatCount', 'indefinite');
+    focusPoint.appendChild(animateRadius);
+    
+    // Add opacity animation
+    const animateOpacity = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+    animateOpacity.setAttribute('attributeName', 'stroke-opacity');
+    animateOpacity.setAttribute('values', '0.4;0.9;0.4');
+    animateOpacity.setAttribute('dur', '4s');
+    animateOpacity.setAttribute('repeatCount', 'indefinite');
+    focusPoint.appendChild(animateOpacity);
+    
+    // Add glowing aura effect - also with adjusted coordinates
+    const aura = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    aura.id = 'third-eye-aura';
+    aura.setAttribute('cx', SVG_THIRD_EYE_X);
+    aura.setAttribute('cy', SVG_THIRD_EYE_Y);
+    aura.setAttribute('r', '12');
+    aura.setAttribute('fill', 'none');
+    aura.setAttribute('stroke', colors.accent1);
+    aura.setAttribute('stroke-width', '1');
+    aura.setAttribute('filter', 'url(#haloFilter)');
+    aura.setAttribute('opacity', '0.5');
+    
+    // Add pulsing animation for aura
+    const animateAuraRadius = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+    animateAuraRadius.setAttribute('attributeName', 'r');
+    animateAuraRadius.setAttribute('values', '10;20;10');
+    animateAuraRadius.setAttribute('dur', '8s');
+    animateAuraRadius.setAttribute('repeatCount', 'indefinite');
+    aura.appendChild(animateAuraRadius);
+    
+    // Add both elements to the group
+    thirdEyeGroup.appendChild(aura);
+    thirdEyeGroup.appendChild(focusPoint);
+    
+    // Add the group to the SVG
+    svgElement.appendChild(thirdEyeGroup);
+}
+        
+        // Create SVG filters for effects
+        function createSVGFilters(defs) {
+            // Enhanced displacement filter for pressure waves
+            const displacementFilter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+            displacementFilter.id = 'displacementFilter';
+            displacementFilter.setAttribute('x', '-20%');
+            displacementFilter.setAttribute('y', '-20%');
+            displacementFilter.setAttribute('width', '140%');
+            displacementFilter.setAttribute('height', '140%');
+            displacementFilter.innerHTML = `
+                <feTurbulence id="turbulence" type="fractalNoise" baseFrequency="0.02" numOctaves="3" seed="1" result="turbulence" />
+                <feDisplacementMap id="displacement" in="SourceGraphic" in2="turbulence" scale="15" xChannelSelector="R" yChannelSelector="G" />
+            `;
+            
+            // Enhanced particle effect filter - this leverages the emergent behavior
+            const particleFilter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+            particleFilter.id = 'particleFilter';
+            particleFilter.setAttribute('x', '-20%');
+            particleFilter.setAttribute('y', '-20%');
+            particleFilter.setAttribute('width', '140%');
+            particleFilter.setAttribute('height', '140%');
+            particleFilter.innerHTML = `
+                <feTurbulence id="particleTurbulence" type="turbulence" baseFrequency="0.05" numOctaves="4" seed="10" result="noise" />
+                <feColorMatrix in="noise" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 7 -3" result="threshold" />
+                <feComposite id="particleComposite" in="SourceGraphic" in2="threshold" operator="in" result="particles" />
+                <feGaussianBlur id="particleBlur" in="particles" stdDeviation="1.5" result="blurredParticles" />
+                <feSpecularLighting in="blurredParticles" surfaceScale="2" specularConstant="1" specularExponent="20" lighting-color="#ffffff" result="specular">
+                    <fePointLight x="250" y="250" z="200" />
+                </feSpecularLighting>
+                <feComposite in="specular" in2="particles" operator="in" result="glowingParticles" />
+                <feMerge>
+                    <feMergeNode in="glowingParticles" />
+                    <feMergeNode in="particles" />
+                </feMerge>
+            `;
+            
+            // Improved energy halo filter (more visible glow)
+            const haloFilter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+            haloFilter.id = 'haloFilter';
+            haloFilter.setAttribute('x', '-50%');
+            haloFilter.setAttribute('y', '-50%');
+            haloFilter.setAttribute('width', '200%');
+            haloFilter.setAttribute('height', '200%');
+            haloFilter.innerHTML = `
+                <feColorMatrix type="matrix" values="0 0 0 0 0.8 0 0 0 0 0.8 0 0 0 0 0.9 0 0 0 1 0" result="glow" />
+                <feGaussianBlur in="glow" stdDeviation="4" result="blurredGlow" />
+                <feFlood flood-color="#00FFFF" flood-opacity="0.7" result="floodFill" />
+                <feComposite in="floodFill" in2="blurredGlow" operator="in" result="coloredGlow" />
+                <feMerge>
+                    <feMergeNode in="coloredGlow" />
+                    <feMergeNode in="SourceGraphic" />
+                </feMerge>
+            `;
+            
+            // Create a separate pulsing filter for third eye effect
+            const pulseFilter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+            pulseFilter.id = 'pulseFilter';
+            pulseFilter.setAttribute('x', '-50%');
+            pulseFilter.setAttribute('y', '-50%');
+            pulseFilter.setAttribute('width', '200%');
+            pulseFilter.setAttribute('height', '200%');
+            pulseFilter.innerHTML = `
+                <feGaussianBlur stdDeviation="2" result="blur" />
+                <feColorMatrix in="blur" type="matrix" 
+                    values="0 0 0 0 1
+                            0 0 0 0 1 
+                            0 0 0 0 1
+                            0 0 0 1 0" 
+                    result="glow" />
+                <feMerge>
+                    <feMergeNode in="glow" />
+                    <feMergeNode in="SourceGraphic" />
+                </feMerge>
+            `;
+            
+            // Add filters to defs
+            defs.appendChild(displacementFilter);
+            defs.appendChild(particleFilter);
+            defs.appendChild(haloFilter);
+            defs.appendChild(pulseFilter);
+            
+            // Store references to filter elements
+            svgFilters = {
+                turbulence: document.getElementById('turbulence'),
+                displacement: document.getElementById('displacement'),
+                particleTurbulence: document.getElementById('particleTurbulence'),
+                particleComposite: document.getElementById('particleComposite'),
+                particleBlur: document.getElementById('particleBlur')
+            };
+        }
+        
+        // Initialize effect canvas
+        function initEffectCanvas() {
+            const canvas = document.getElementById('effect-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // Initialize particle system
+        function initParticleSystem() {
+            particleSystem = {
+                particles: [],
+                particlePool: [],
+                maxParticles: 300, // Cap the total number of particle
+                canvas: document.getElementById('particle-canvas'),
+                ctx: document.getElementById('particle-canvas').getContext('2d'),
+                
+                // Create a new particle
+                // Modified createParticle method
+                createParticle(x, y, color, size, lifetime) {
+                // Check particle pool first
+                if (this.particlePool.length > 0) {
+                    const particle = this.particlePool.pop();
+                    // Reset particle properties
+                    particle.x = x;
+                    particle.y = y;
+                    particle.originX = x;
+                    particle.originY = y;
+                    particle.size = size || Math.random() * 4 + 2;
+                    particle.color = color || colors.accent2;
+        particle.speed = Math.random() * 1 + 0.5;
+        particle.vx = Math.random() * 2 - 1;
+        particle.vy = Math.random() * 2 - 1;
+        particle.lifetime = lifetime || 1.0;
+                    particle.decay = Math.random() * 0.02 + 0.005;
+                    return particle;
+                 }
+    
+                 // Create new particle if pool is empty
+                 return {
+                     x: x,
+                     y: y,
+                     originX: x,
+                     originY: y,
+        size: size || Math.random() * 4 + 2,
+        color: color || colors.accent2,
+        speed: Math.random() * 1 + 0.5,
+        vx: Math.random() * 2 - 1,
+        vy: Math.random() * 2 - 1,
+                     lifetime: lifetime || 1.0,
+                     decay: Math.random() * 0.02 + 0.005
+                     };
+                },
+                
+                // Update all particles
+                update() {
+                    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                    // Skip drawing if too many particles (performance threshold)
+                    if (this.particles.length > this.maxParticles) {
+                        // Keep the newest particles, remove oldest ones
+                        const excess = this.particles.length - this.maxParticles;
+                        this.particlePool.push(...this.particles.splice(0, excess));
+                    }
+
+                    // Batch similar operations to reduce context state changes
+                    const particlesByColor = {};
+                  
+                    // Update and render each particle
+                    for (let i = 0; i < this.particles.length; i++) {
+                        const p = this.particles[i];
+                        
+                        // Update position
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        
+                        // Apply gravity toward third eye
+                        // Apply gravity toward third eye with stronger pull
+                        const dx = THIRD_EYE_X - p.x;
+                        const dy = THIRD_EYE_Y - p.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        // Subtle attraction to third eye
+                        if (distance > 0) {
+                            // Base pull is stronger (0.2 instead of 0.05)
+                            const basePull = 0.2 * effectState.pressureLevel;
+    
+                            // Add inverse square factor for more realistic gravity
+                            // Stronger when closer, weaker when further
+                            const distanceFactor = Math.min(500 / (distance * distance), 3);
+    
+                            // Calculate final gravitational force
+                            const gravitationalPull = basePull * distanceFactor;
+    
+                            p.vx += (dx / distance) * gravitationalPull;
+                            p.vy += (dy / distance) * gravitationalPull;
+    
+                            // Add slight orbital component for more interesting movement
+                            p.vx += (dy / distance) * gravitationalPull * 0.1;
+                            p.vy -= (dx / distance) * gravitationalPull * 0.1;
+                        }
+                        
+                        // Apply friction to slow particles
+                        p.vx *= 0.98;
+                        p.vy *= 0.98;
+                        
+                        // Reduce lifetime
+                        p.lifetime -= p.decay;
+                        
+                        // Remove dead particles and recycle
+                        if (p.lifetime <= 0) {
+                            this.particlePool.push(this.particles.splice(i, 1)[0]);
+                            i--;
+                            continue;
+                        }
+                        
+                        // Draw particle with glow effect
+                        this.ctx.save();
+                        this.ctx.globalAlpha = p.lifetime;
+                        
+                        // Outer glow
+                        this.ctx.beginPath();
+                        this.ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2);
+                        const gradient = this.ctx.createRadialGradient(
+                            p.x, p.y, p.size * 0.5,
+                            p.x, p.y, p.size * 2
+                        );
+                        gradient.addColorStop(0, p.color);
+                        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                        this.ctx.fillStyle = gradient;
+                        this.ctx.fill();
+                        
+                        // Inner particle
+                        this.ctx.beginPath();
+                        this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        this.ctx.fillStyle = p.color;
+                        this.ctx.fill();
+                        
+                        this.ctx.restore();
+
+                        // Group by color for batch rendering
+                        if (!particlesByColor[p.color]) {
+                            particlesByColor[p.color] = [];
+                            }
+                        particlesByColor[p.color].push(p);
+                      }
+                  
+                  // Render particles by color groups to minimize context changes
+                  Object.keys(particlesByColor).forEach(color => {
+                  const particles = particlesByColor[color];
+        
+                  // Set shared properties once per color group
+                  this.ctx.fillStyle = color;
+                  this.ctx.globalAlpha = 0.8;
+        
+                  // Draw all particles with the same color
+                  for (const p of particles) {
+                      this.ctx.beginPath();
+                      this.ctx.arc(p.x, p.y, p.size * p.lifetime, 0, Math.PI * 2);
+                      this.ctx.fill();
+                      }
+                  });
+                },
+                
+                // Emit particles from a specific path element
+                emitFromPath(pathElement, count, color) {
+                    if (!pathElement || !pathElement.dataset) return;
+                    
+                    const x = parseFloat(pathElement.dataset.centerX) || CANVAS_SIZE / 2;
+                    const y = parseFloat(pathElement.dataset.centerY) || CANVAS_SIZE / 2;
+                    
+                    for (let i = 0; i < count; i++) {
+                        this.particles.push(this.createParticle(
+                            x + (Math.random() * 20 - 10),
+                            y + (Math.random() * 20 - 10),
+                            color,
+                            Math.random() * 3 + 1,
+                            Math.random() * 0.3 + 0.7
+                        ));
+                    }
+                },
+                
+                // Create a burst of particles from the third eye
+                createBurst(count, color) {
+                    for (let i = 0; i < count; i++) {
+                        // Calculate angle and distance
+                        const angle = Math.random() * Math.PI * 2;
+                        const distance = Math.random() * 15;
+                        
+                        // Create particle
+                        const particle = this.createParticle(
+                            THIRD_EYE_X + Math.cos(angle) * distance,
+                            THIRD_EYE_Y + Math.sin(angle) * distance,
+                            color || colors.accent2
+                        );
+                        
+                        // Higher velocity for burst
+                        particle.vx = Math.cos(angle) * (Math.random() * 3 + 2);
+                        particle.vy = Math.sin(angle) * (Math.random() * 3 + 2);
+                        
+                        // Add to system
+                        this.particles.push(particle);
+                    }
+                }
+            };
+        }
+        
+        // Fetch blockchain data
+        async function fetchBlockchainData() {
+            try {
+                // First fetch current block height
+                const heightResponse = await fetch('/blockheight');
+                const height = await heightResponse.text();
+                
+                // Then fetch block hash for this height
+                const hashResponse = await fetch(`/blockhash/${height}`);
+                const hash = await hashResponse.text();
+                
+                // Get block info for more detailed data
+                const blockInfoResponse = await fetch(`/r/blockinfo/${hash}`);
+                const blockInfo = await blockInfoResponse.json();
+                
+                // Get timestamps
+                const blockTime = blockInfo.timestamp || Math.floor(Date.now() / 1000);
+                const previousBlockTime = blockData.time;
+                
+                // Update block data
+                blockData = {
+                    height: parseInt(height),
+                    hash: hash,
+                    merkleRoot: blockInfo.merkle_root || hash,
+                    time: blockTime,
+                    transactionCount: blockInfo.transaction_count || 3000,
+                    feeRatePercentiles: blockInfo.feerate_percentiles || [1, 2, 5, 10, 20]
+                };
+                
+                // Check if this is a new block
+                if (previousBlockTime > 0 && blockTime > previousBlockTime) {
+                    // Trigger new block animation
+                    triggerBlockEvent();
+                }
+                
+                // Update colors based on merkle root
+                updateColors();
+                
+                // Update info overlay
+                updateInfoOverlay();
+                
+                // Update effect parameters
+                updateEffectParameters();
+                
+                // Fetch related inscriptions on the same sat
+                if (effectState.relatedInscriptions.length === 0) {
+                    fetchRelatedInscriptions();
+                }
+                
+            } catch (error) {
+                console.error('Error fetching blockchain data:', error);
+            }
+        }
+        
+        // Generate colors from merkle root
+        function updateColors() {
+            // Extract values from merkle root
+            const merkleRoot = blockData.merkleRoot;
+            
+            if (merkleRoot && merkleRoot.length >= 18) {
+                // Base color from first 6 characters
+                colors.base = '#' + merkleRoot.slice(0, 6);
+                
+                // Accent colors from next segments
+                colors.accent1 = '#' + merkleRoot.slice(6, 12);
+                colors.accent2 = '#' + merkleRoot.slice(12, 18);
+                
+                // Apply colors to portrait elements
+                applyColors();
+            }
+        }
+        
+        // Apply generated colors to portrait elements
+        function applyColors() {
+            if (!isPortraitLoaded) return;
+            
+            // Update background elements with new colors
+            const backgroundGroup = document.getElementById('portrait-background');
+            if (backgroundGroup) {
+                const bgPaths = backgroundGroup.querySelectorAll('path');
+                bgPaths.forEach((path, index) => {
+                    // Alternate colors for visual interest
+                    const color = index % 2 === 0 ? colors.accent1 : colors.accent2;
+                    path.style.transition = 'fill 1s ease, opacity 1s ease';
+                    path.style.fill = color;
+                    
+                    // Apply pulsing opacity for more visible effect
+                    path.style.animation = `pulseOpacity ${3 + index % 3}s infinite ${index * 100}ms`;
+                });
+            }
+            
+            // Update feature elements (black paths)
+            const featuresGroup = document.getElementById('portrait-features');
+            if (featuresGroup) {
+                const featurePaths = featuresGroup.querySelectorAll('path');
+                featurePaths.forEach((path, index) => {
+                    // Apply particle filter to feature paths
+                    path.style.filter = 'url(#particleFilter)';
+                    
+                    // Vary opacity based on index for more visible effect
+                    const baseOpacity = 0.7 + (index % 5) * 0.05;
+                    path.style.opacity = baseOpacity;
+                    
+                    // Add slight color tint to the black paths for visual interest
+                    path.style.fill = '#000000';
+                });
+            }
+            
+            // Update third eye elements
+            const thirdEyePoint = document.getElementById('third-eye-point');
+            const thirdEyeAura = document.getElementById('third-eye-aura');
+            
+            if (thirdEyePoint) {
+                thirdEyePoint.style.stroke = colors.accent2;
+            }
+            
+            if (thirdEyeAura) {
+                thirdEyeAura.style.stroke = colors.accent1;
+            }
+        }
+        
+        // Initialize effects based on blockchain data
+        function initEffects() {
+            // Calculate effect parameters based on blockchain data
+            updateEffectParameters();
+            
+            // Initial particle burst
+            if (particleSystem) {
+                particleSystem.createBurst(50, colors.accent2);
+            }
+        }
+        
+        // Update effect parameters based on blockchain data
+        function updateEffectParameters() {
+            // Transaction count influences energy/particle intensity
+            const txCount = blockData.transactionCount;
+            const normalizedCount = Math.min(Math.max(txCount, 1000), 5000) / 5000;
+            
+            effectState.frequency = 0.5 + (normalizedCount * 1.5);
+            effectState.amplitude = 2 + (normalizedCount * 8);
+            
+            // Fee rates influence pressure effects
+            const medianFee = blockData.feeRatePercentiles[2] || 5;
+            const pressure = Math.min(medianFee / 20, 1);
+            
+            effectState.pressureLevel = pressure;
+            
+            // Time since last block influences dissolution
+            const currentTime = Math.floor(Date.now() / 1000);
+            const timeSinceBlock = currentTime - blockData.time;
+            
+            effectState.dissolveLevel = Math.min(timeSinceBlock / 600, 1); // Max dissolution after 10 minutes
+            
+            // Update SVG filters
+            updateFilters();
+            
+            // Emit particles based on blockchain activity
+            emitBlockchainParticles();
+        }
+        
+        // Update SVG filters based on effect parameters
+        function updateFilters() {
+            if (!svgFilters) return;
+            
+            // Update turbulence filter for pressure waves (make it more visible)
+            const baseFrequency = 0.02 + (effectState.pressureLevel * 0.08);
+            svgFilters.turbulence.setAttribute('baseFrequency', baseFrequency.toFixed(3));
+            
+            // Update displacement scale (increase range for visibility)
+            const displacementScale = 5 + (effectState.pressureLevel * 15);
+            svgFilters.displacement.setAttribute('scale', displacementScale.toFixed(1));
+            
+            // Update particle effect parameters
+            const particleFreq = 0.05 + (effectState.pressureLevel * 0.1);
+            svgFilters.particleTurbulence.setAttribute('baseFrequency', particleFreq.toFixed(3));
+            svgFilters.particleTurbulence.setAttribute('seed', Math.floor(Date.now() / 1000) % 100);
+            
+            // Apply filters to individual paths for better effect
+            const featuresGroup = document.getElementById('portrait-features');
+            const backgroundGroup = document.getElementById('portrait-background');
+            
+            if (featuresGroup && backgroundGroup) {
+                // Get all paths
+                const featurePaths = featuresGroup.querySelectorAll('path');
+                const bgPaths = backgroundGroup.querySelectorAll('path');
+                
+                // Apply displacement filter to background paths
+                bgPaths.forEach((path, index) => {
+                    path.style.filter = `url(#displacementFilter)`;
+                });
+                
+                // Apply particle filter to feature paths
+                featurePaths.forEach((path) => {
+                    path.style.filter = `url(#particleFilter)`;
+                });
+            }
+        }
+        
+        // Emit particles based on blockchain data
+        function emitBlockchainParticles() {
+            if (!particleSystem || !isPortraitLoaded) return;
+            
+            // Base emission rate on transaction count
+            const txCount = blockData.transactionCount;
+            const normalizedTx = Math.min(Math.max(txCount, 1000), 5000) / 5000;
+            
+            // Create particles from random feature paths
+            const featuresGroup = document.getElementById('portrait-features');
+            if (featuresGroup) {
+                const featurePaths = featuresGroup.querySelectorAll('path');
+                
+                // Randomly select paths to emit particles from
+                const numEmitters = Math.floor(normalizedTx * 10) + 3;
+                
+                for (let i = 0; i < numEmitters; i++) {
+                    const randomIndex = Math.floor(Math.random() * featurePaths.length);
+                    const path = featurePaths[randomIndex];
+                    
+                    // Emit particles with color based on fee rates
+                    const medianFee = blockData.feeRatePercentiles[2] || 5;
+                    const hue = Math.floor(medianFee * 3) % 360;
+                    const color = `hsl(${hue}, 80%, 60%)`;
+                    
+                    // Number of particles also influenced by fee rates
+                    const particleCount = Math.floor(medianFee / 2) + 2;
+                    
+                    particleSystem.emitFromPath(path, particleCount, color);
+                }
+            }
+        }
+        
+        // Trigger new block event animation
+        function triggerBlockEvent() {
+            // Create a radial mask animation emanating from the third eye
+            const svgElement = document.querySelector('svg');
+            if (!svgElement) return;
+            
+            // Find or create defs element
+            let defs = svgElement.querySelector('defs');
+            if (!defs) return;
+            
+            // Create a radial gradient for the reveal effect
+            const radialGradientId = 'blockEventGradient-' + Date.now();
+            const radialGradient = document.createElementNS('http://www.w3.org/2000/svg', 'radialGradient');
+            radialGradient.id = radialGradientId;
+            radialGradient.setAttribute('cx', THIRD_EYE_X);
+            radialGradient.setAttribute('cy', THIRD_EYE_Y);
+            radialGradient.setAttribute('r', '0');
+            radialGradient.setAttribute('gradientUnits', 'userSpaceOnUse');
+            
+            // Create gradient stops
+            const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop1.setAttribute('offset', '0%');
+            stop1.setAttribute('stop-color', 'white');
+            
+            const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop2.setAttribute('offset', '100%');
+            stop2.setAttribute('stop-color', 'black');
+            
+            radialGradient.appendChild(stop1);
+            radialGradient.appendChild(stop2);
+            
+            // Add animation to the gradient radius
+            const animate = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+            animate.setAttribute('attributeName', 'r');
+            animate.setAttribute('from', '0');
+            animate.setAttribute('to', '800');
+            animate.setAttribute('dur', '2s');
+            animate.setAttribute('fill', 'freeze');
+            
+            radialGradient.appendChild(animate);
+            defs.appendChild(radialGradient);
+            
+            // Create a mask using the gradient
+            const maskId = 'blockEventMask-' + Date.now();
+            const mask = document.createElementNS('http://www.w3.org/2000/svg', 'mask');
+            mask.id = maskId;
+            
+            // Add a rectangle with the gradient as fill
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', '0');
+            rect.setAttribute('y', '0');
+            rect.setAttribute('width', '576');
+            rect.setAttribute('height', '576');
+            rect.setAttribute('fill', `url(#${radialGradientId})`);
+            
+            mask.appendChild(rect);
+            defs.appendChild(mask);
+            
+            // Apply the mask to the portrait
+            const featuresGroup = document.getElementById('portrait-features');
+            if (featuresGroup) {
+                featuresGroup.setAttribute('mask', `url(#${maskId})`);
+                
+                // Remove the mask after animation completes
+                setTimeout(() => {
+                    featuresGroup.removeAttribute('mask');
+                    
+                    // Clean up gradient and mask
+                    setTimeout(() => {
+                        const oldGradient = document.getElementById(radialGradientId);
+                        const oldMask = document.getElementById(maskId);
+                        if (oldGradient) oldGradient.remove();
+                        if (oldMask) oldMask.remove();
+                    }, 100);
+                }, 2100);
+            }
+            
+            // Also create an enhanced ripple and particle effect
+            createEnhancedBlockEvent();
+        }
+        
+        // Create enhanced ripple and particle effects for new block
+        function createEnhancedBlockEvent() {
+            // Create ripple effect on canvas
+            createRippleEffect();
+            
+            // Create particle burst from third eye
+            if (particleSystem) {
+                // Large burst of particles
+                particleSystem.createBurst(100, colors.accent2);
+                
+                // Secondary bursts with delay
+                setTimeout(() => {
+                    particleSystem.createBurst(50, colors.accent1);
+                }, 500);
+                
+                setTimeout(() => {
+                    particleSystem.createBurst(25, colors.base);
+                }, 1000);
+            }
+            
+            // Apply temporary effect to all feature paths
+            const featuresGroup = document.getElementById('portrait-features');
+            if (featuresGroup) {
+                const featurePaths = featuresGroup.querySelectorAll('path');
+                
+                featurePaths.forEach((path, index) => {
+                    // Temporarily increase opacity and apply glow
+                    const originalFilter = path.style.filter;
+                    const originalOpacity = path.style.opacity;
+                    
+                    // Apply glow effect
+                    path.style.filter = 'url(#haloFilter)';
+                    path.style.opacity = '1';
+                    
+                    // Sequentially restore original state
+                    setTimeout(() => {
+                        path.style.filter = originalFilter;
+                        path.style.opacity = originalOpacity;
+                    }, 1000 + index * 30);
+                });
+            }
+        }
+        
+        // Create an enhanced ripple effect on the canvas
+        function createRippleEffect() {
+            const canvas = document.getElementById('effect-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Create multiple ripples with different speeds/colors for more visual interest
+            let ripples = [
+                {
+                    x: THIRD_EYE_X,
+                    y: THIRD_EYE_Y,
+                    radius: 0,
+                    maxRadius: CANVAS_SIZE,
+                    speed: 4,
+                    color: colors.accent2,
+                    width: 3
+                },
+                {
+                    x: THIRD_EYE_X,
+                    y: THIRD_EYE_Y,
+                    radius: 0,
+                    maxRadius: CANVAS_SIZE * 0.85,
+                    speed: 6,
+                    color: colors.accent1,
+                    width: 2,
+                    delay: 200
+                },
+                {
+                    x: THIRD_EYE_X,
+                    y: THIRD_EYE_Y,
+                    radius: 0,
+                    maxRadius: CANVAS_SIZE * 0.7,
+                    speed: 8,
+                    color: colors.base,
+                    width: 1,
+                    delay: 400
+                }
+            ];
+            
+            let startTime = Date.now();
+            
+            function drawRipples() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                let currentTime = Date.now();
+                let stillAnimating = false;
+                
+                // Add a semi-transparent overlay for visual depth
+                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ripples.forEach(ripple => {
+                    // Check if ripple should start based on delay
+                    if (ripple.delay && currentTime - startTime < ripple.delay) {
+                        stillAnimating = true;
+                        return;
+                    }
+                    
+                    if (ripple.radius < ripple.maxRadius) {
+                        // Create gradient for more visually interesting ripples
+                        const gradient = ctx.createRadialGradient(
+                            ripple.x, ripple.y, ripple.radius * 0.8,
+                            ripple.x, ripple.y, ripple.radius
+                        );
+                        
+                        gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                        gradient.addColorStop(0.5, ripple.color);
+                        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                        
+                        // Draw the ripple
+                        ctx.beginPath();
+                        ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
+                        ctx.strokeStyle = gradient;
+                        ctx.lineWidth = ripple.width;
+                        ctx.globalAlpha = 1 - (ripple.radius / ripple.maxRadius);
+                        ctx.stroke();
+                        
+                        // Add a glow effect
+                        ctx.shadowColor = ripple.color;
+                        ctx.shadowBlur = 15;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 0;
+                        
+                        // Increase radius
+                        ripple.radius += ripple.speed;
+                        stillAnimating = true;
+                    }
+                });
+                
+                // Create particles that emanate from the third eye
+                if (currentTime - startTime < 2000) { // Only during first 2 seconds
+                    for (let i = 0; i < 3; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const distance = Math.random() * 100;
+                        
+                        ctx.beginPath();
+                        ctx.arc(
+                            THIRD_EYE_X + Math.cos(angle) * distance,
+                            THIRD_EYE_Y + Math.sin(angle) * distance,
+                            Math.random() * 2 + 1,
+                            0, Math.PI * 2
+                        );
+                        
+                        ctx.fillStyle = colors.accent2;
+                        ctx.shadowColor = colors.accent2;
+                        ctx.shadowBlur = 10;
+                        ctx.globalAlpha = Math.random() * 0.7 + 0.3;
+                        ctx.fill();
+                    }
+                    
+                    stillAnimating = true;
+                }
+                
+                // Reset shadow for next frame
+                ctx.shadowBlur = 0;
+                
+                // Continue animation if any ripples are still active
+                if (stillAnimating) {
+                    requestAnimationFrame(drawRipples);
+                } else {
+                    // Fade out when complete
+                    let opacity = 1;
+                    function fadeOut() {
+                        opacity -= 0.05;
+                        if (opacity <= 0) {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            return;
+                        }
+                        
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.globalAlpha = opacity;
+                        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        
+                        requestAnimationFrame(fadeOut);
+                    }
+                    
+                    fadeOut();
+                }
+            }
+            
+            // Start ripple animation
+            drawRipples();
+        }
+        
+        // Fetch related inscriptions on the same sat
+        // Fixed version of fetchRelatedInscriptions function
+async function fetchRelatedInscriptions() {
+    try {
+        // Since we already know the sat number, we'll use it directly
+        const satNumber = 1430463027316;
+        
+        // Fetch all inscriptions on this sat
+        const satResponse = await fetch(`/r/sat/${satNumber}`);
+        const satData = await satResponse.json();
+        
+        // Filter out our own inscription
+        const relatedIds = satData.ids.filter(id => id !== CURRENT_INSCRIPTION_ID);
+        
+        // Process the first few related inscriptions (limit to 3 for performance)
+        const processed = [];
+        for (let i = 0; i < Math.min(relatedIds.length, 3); i++) {
+            processed.push(relatedIds[i]);
+        }
+        
+        effectState.relatedInscriptions = processed;
+        
+        // Create visual connection between related inscriptions
+        createInscriptionConnections();
+        
+    } catch (error) {
+        console.error('Error fetching related inscriptions:', error);
+        
+        // Fallback: Still create connections even if fetching fails
+        createInscriptionConnections();
+    }
+}
+
+// Fixed version of createInscriptionConnections function
+function createInscriptionConnections() {
+    const svgElement = document.querySelector('svg');
+    if (!svgElement) return;
+    
+    // Create a group for inscription connections
+    const connectionsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    connectionsGroup.id = 'inscription-connections';
+    
+    // Use the SVG coordinates for the third eye
+    const thirdEyeX = SVG_THIRD_EYE_X; // Use the adjusted coordinates
+    const thirdEyeY = SVG_THIRD_EYE_Y; // Use the adjusted coordinates
+    
+    // If we have related inscriptions, create connection paths
+    if (effectState.relatedInscriptions.length > 0) {
+        // Add connections radiating from the third eye
+        effectState.relatedInscriptions.forEach((inscriptionId, index) => {
+            // Calculate angle based on index and total count
+            // Create a fan-like pattern in the upper right quadrant
+            const spread = Math.PI * 1.5; // 270 degrees spread
+            const startAngle = Math.PI * 0.25; // Start at 45 degrees
+            const angle = startAngle + (index / Math.max(effectState.relatedInscriptions.length - 1, 1)) * spread;
+            
+            // Calculate end point - keep within a reasonable visual space
+            const distance = SVG_VIEWBOX_SIZE * 0.4; // 40% of SVG size
+            const endX = thirdEyeX + Math.cos(angle) * distance;
+            const endY = thirdEyeY + Math.sin(angle) * distance;
+            
+            // Create a curved path instead of straight line
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            
+            // Control points for bezier curve
+            const ctrlDistance = distance * 0.5;
+            const ctrlX = thirdEyeX + Math.cos(angle) * ctrlDistance;
+            const ctrlY = thirdEyeY + Math.sin(angle) * ctrlDistance;
+            
+            // Create curve path
+            const pathD = `M ${thirdEyeX},${thirdEyeY} Q ${ctrlX},${ctrlY} ${endX},${endY}`;
+            path.setAttribute('d', pathD);
+            path.setAttribute('stroke', colors.accent1);
+            path.setAttribute('stroke-width', '1');
+            path.setAttribute('stroke-dasharray', '5,5');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('opacity', '0.5');
+            
+            // Add pulsing animation with different timing for each connection
+            const animate = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+            animate.setAttribute('attributeName', 'stroke-dashoffset');
+            animate.setAttribute('from', '0');
+            animate.setAttribute('to', '20');
+            animate.setAttribute('dur', `${3 + index * 0.5}s`); // Varied timing
+            animate.setAttribute('repeatCount', 'indefinite');
+            path.appendChild(animate);
+            
+            // Add connection to group
+            connectionsGroup.appendChild(path);
+            
+            // Create a node at the end of the path
+            const node = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            node.setAttribute('cx', endX);
+            node.setAttribute('cy', endY);
+            node.setAttribute('r', '3');
+            node.setAttribute('fill', colors.accent1);
+            node.setAttribute('opacity', '0.7');
+            
+            // Add pulse animation to node
+            const animateNode = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+            animateNode.setAttribute('attributeName', 'r');
+            animateNode.setAttribute('values', '3;5;3');
+            animateNode.setAttribute('dur', `${2 + index * 0.3}s`);
+            animateNode.setAttribute('repeatCount', 'indefinite');
+            node.appendChild(animateNode);
+            
+            connectionsGroup.appendChild(node);
+            
+            // Add label for inscription ID
+            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            label.classList.add('label-element');
+          
+            // Position label next to the node
+            const labelOffsetX = Math.cos(angle) * 10;
+            const labelOffsetY = Math.sin(angle) * 10;
+            label.setAttribute('x', endX + labelOffsetX);
+            label.setAttribute('y', endY + labelOffsetY);
+            
+            // Style the label
+            label.setAttribute('fill', colors.accent1);
+            label.setAttribute('font-size', '9');
+            label.setAttribute('font-weight', 'bold');
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('opacity', '0');
+            label.setAttribute('filter', 'url(#textGlow)'); // Add glow for better readability
+            
+            // Display shortened ID with # prefix
+            const shortId = `#${inscriptionId.substring(0, 6)}...`;
+            label.textContent = shortId;
+            
+            // Add label to group
+            connectionsGroup.appendChild(label);
+        });
+    }
+    
+    // Add connections group to SVG
+    svgElement.appendChild(connectionsGroup);
+    
+    // Add sat number indicator
+    addSatNumberIndicator(svgElement, thirdEyeX, thirdEyeY);
+}
+
+// New function to add a visual sat number indicator
+function addSatNumberIndicator(svgElement, x, y) {
+    // Create a group for the sat number
+    const satGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    satGroup.id = 'sat-number-indicator';
+    satGroup.classList.add('label-element'); // Add a class for easier selection
+    
+    // Create a subtle background for the sat number
+    const background = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    background.setAttribute('x', x - 40);
+    background.setAttribute('y', y + 30);
+    background.setAttribute('width', '80');
+    background.setAttribute('height', '16');
+    background.setAttribute('rx', '8');
+    background.setAttribute('fill', 'rgba(0,0,0,0.7)');
+    background.setAttribute('stroke', colors.accent2);
+    background.setAttribute('stroke-width', '0.5');
+    
+    // Create the sat number label
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', x);
+    label.setAttribute('y', y + 42);
+    label.setAttribute('fill', colors.accent1);
+    label.setAttribute('font-size', '9');
+    label.setAttribute('font-family', 'monospace');
+    label.setAttribute('text-anchor', 'middle');
+    
+    // Format the sat number nicely with commas
+    const satNumber = 1430463027316;
+    const formattedSat = satNumber.toLocaleString();
+    label.textContent = `sat: ${formattedSat}`;
+    
+    // Add elements to group
+    satGroup.appendChild(background);
+    satGroup.appendChild(label);
+    
+    // Instead of using an animate element for opacity, set initial opacity
+    satGroup.setAttribute('opacity', '0');
+    
+    // Add group to SVG
+    svgElement.appendChild(satGroup);
+    
+    return satGroup; // Return for reference
+}
+
+        // Convert the sat number to a visual seed
+        function deriveSatParameters() {
+            // Break the sat number into segments for various parameters
+            const satStr = SAT_NUMBER.toString();
+    
+            // Create a hash-like function for the sat number
+            let satHash = 0;
+            for (let i = 0; i < satStr.length; i++) {
+                satHash = ((satHash << 5) - satHash) + parseInt(satStr[i]);
+                satHash = satHash & satHash; // Convert to 32bit integer
+            }
+    
+            // Make sure we get a positive value
+            satHash = Math.abs(satHash);
+    
+            // Extract different parameters from the hash
+            return {
+                // Visual parameters derived from sat number
+                orbitFactor: (satHash % 100) / 100, // 0-1 value for orbit intensity
+                particleLifetime: (satHash % 20) / 10 + 1, // 1-3 value for particle lifetime
+                colorShift: (satHash % 360), // 0-359 value for color shifting
+                burstIntensity: (satHash % 10) + 5, // 5-14 value for particle bursts
+        
+                // Create a visual representation of the sat number
+                visualDigits: satStr.split('').map(n => parseInt(n))
+            };
+        }
+
+        // Add the derived parameters to the effectState
+        effectState.satParams = deriveSatParameters();
+
+// Create a visual representation of the sat number
+function createSatNumberVisualization(svgElement) {
+    const defs = svgElement.querySelector('defs');
+    if (!defs) return;
+    
+    // Create a group for the sat number visualization
+    const satGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    satGroup.id = 'sat-number-visualization';
+    
+    // Get the visual digits array
+    const { visualDigits } = effectState.satParams;
+    
+    // Create a spiral pattern of small nodes representing the sat number
+    const centerX = SVG_THIRD_EYE_X;
+    const centerY = SVG_THIRD_EYE_Y;
+    const startRadius = 30; // Start a bit away from the third eye
+    const angleStep = Math.PI * 0.5; // How much to rotate for each digit
+    
+    visualDigits.forEach((digit, index) => {
+        // Calculate position on a spiral
+        const angle = angleStep * index;
+        const radius = startRadius + (index * 8);
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius;
+        
+        // Create a node for this digit
+        const node = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        node.setAttribute('cx', x);
+        node.setAttribute('cy', y);
+        node.setAttribute('r', digit * 0.5 + 1); // Size based on digit value
+        node.setAttribute('fill', colors.accent1);
+        node.setAttribute('opacity', '0.7');
+        node.setAttribute('filter', 'url(#nodeGlow)');
+        
+        // Add subtle animation
+        const animate = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+        animate.setAttribute('attributeName', 'r');
+        animate.setAttribute('values', `${digit * 0.5 + 1};${digit * 0.5 + 2};${digit * 0.5 + 1}`);
+        animate.setAttribute('dur', `${3 + digit * 0.5}s`);
+        animate.setAttribute('repeatCount', 'indefinite');
+        node.appendChild(animate);
+        
+        satGroup.appendChild(node);
+        
+        // Create connecting lines between nodes
+        if (index > 0) {
+            const prevAngle = angleStep * (index - 1);
+            const prevRadius = startRadius + ((index - 1) * 8);
+            const prevX = centerX + Math.cos(prevAngle) * prevRadius;
+            const prevY = centerY + Math.sin(prevAngle) * prevRadius;
+            
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', prevX);
+                    line.setAttribute('y1', prevY);
+                    line.setAttribute('x2', x);
+                    line.setAttribute('y2', y);
+                    line.setAttribute('stroke', colors.accent1);
+                    line.setAttribute('stroke-width', '0.5');
+                    line.setAttribute('opacity', '0.3');
+            
+                    satGroup.appendChild(line);
+                }
+            });
+    
+            svgElement.appendChild(satGroup);
+        }
+        
+        // Update info overlay with blockchain data
+        function updateInfoOverlay() {
+            const infoOverlay = document.getElementById('info-overlay');
+            
+            if (infoOverlay) {
+                const blockTime = new Date(blockData.time * 1000).toLocaleTimeString();
+                const timeSinceBlock = Math.floor((Date.now() / 1000) - blockData.time);
+                const minutes = Math.floor(timeSinceBlock / 60);
+                const seconds = timeSinceBlock % 60;
+                
+                // Add color to fee rate based on value
+                let feeRateClass = 'normal';
+                const medianFee = blockData.feeRatePercentiles[2] || 0;
+                
+                if (medianFee > 20) feeRateClass = 'high';
+                else if (medianFee > 10) feeRateClass = 'medium';
+                else feeRateClass = 'low';
+                
+                infoOverlay.innerHTML = `
+                    <span style="color: ${colors.accent1}">Block:</span> ${blockData.height}<br>
+                    <span style="color: ${colors.accent1}">Time:</span> ${blockTime} (${minutes}m ${seconds}s ago)<br>
+                    <span style="color: ${colors.accent1}">Tx Count:</span> ${blockData.transactionCount}<br>
+                    <span style="color: ${colors.accent1}">Fee Rate:</span> <span style="color: ${feeRateClass === 'high' ? '#ff5555' : feeRateClass === 'medium' ? '#ffaa55' : '#55ff55'}">${medianFee} sat/vB</span><br>
+                    ${effectState.relatedInscriptions.length > 0 ? 
+                      `<span style="color: ${colors.accent1}">Connected:</span> ${effectState.relatedInscriptions.length} inscriptions` : ''}
+                `;
+            }
+        }
+        
+        // Animation loop
+        function startAnimationLoop() {
+            let lastTime = 0;
+            
+            function animate(timestamp) {
+                // Convert to seconds
+                const time = timestamp / 1000;
+                const deltaTime = time - lastTime;
+                lastTime = time;
+
+                // Frame rate management
+                let lastFrameTime = 0;
+                const targetFPS = 60;
+                const frameInterval = 1000 / targetFPS;
+                let frameSkip = false;
+
+                // Calculate time since last frame
+                const elapsed = timestamp - lastFrameTime;
+    
+                // Skip frame if we're running too fast or if frameSkip is enabled
+                if (elapsed < frameInterval || frameSkip) {
+                    animationFrame = requestAnimationFrame(animate);
+                    return;
+                }
+    
+                // Update last frame time
+                lastFrameTime = timestamp;
+    
+                // Enable frame skipping if performance is poor
+                if (elapsed > frameInterval * 2) {
+                    frameSkip = true;
+                    setTimeout(() => { frameSkip = false; }, 1000); // Try normal speed again after 1 second
+                }
+                
+                // Update effect parameters (once per second)
+                if (Math.floor(time) > Math.floor(lastTime)) {
+                    updateEffectParameters();
+                }
+                
+                // Update info overlay (every 5 seconds)
+                if (Math.floor(time) % 5 === 0 && Math.floor(lastTime) % 5 !== 0) {
+                    updateInfoOverlay();
+                }
+                
+                // Animate SVG filters
+                animateFilters(time);
+                
+                // Update particle system
+                if (particleSystem) {
+                    particleSystem.update();
+                }
+                
+                // Request next frame
+                animationFrame = requestAnimationFrame(animate);
+            }
+            
+            // Start animation
+            animationFrame = requestAnimationFrame(animate);
+        }
+        
+        // Animate SVG filters with more pronounced effects
+        function animateFilters(time) {
+            if (!svgFilters) return;
+            
+            // Animate turbulence for a more visible flowing effect
+            const turbulencePhase = (Math.sin(time * effectState.frequency) + 1) / 2;
+            const turbulenceValue = 0.02 + (turbulencePhase * 0.03 * effectState.pressureLevel);
+            svgFilters.turbulence.setAttribute('baseFrequency', `${turbulenceValue} ${turbulenceValue * 0.8}`);
+            
+            // Seed changes for flowing effect (faster for more visible changes)
+            svgFilters.turbulence.setAttribute('seed', Math.floor(time * 20) % 100);
+            
+            // Animate particle turbulence for more dynamic particle effect
+            if (svgFilters.particleTurbulence) {
+                const particlePhase = (Math.cos(time * 0.5) + 1) / 2;
+                const particleFreq = 0.03 + (particlePhase * 0.04 * effectState.dissolveLevel);
+                svgFilters.particleTurbulence.setAttribute('baseFrequency', particleFreq.toFixed(3));
+                svgFilters.particleTurbulence.setAttribute('seed', Math.floor(time * 10) % 100);
+                
+                // Also update blur amount for particles
+                const blurAmount = 1 + (effectState.dissolveLevel * 3);
+                svgFilters.particleBlur.setAttribute('stdDeviation', blurAmount.toFixed(2));
+            }
+            
+            // Update the portrait elements directly for sequential transformations
+            updatePortraitElements(time);
+        }
+        
+        // Apply sequential transformations to portrait elements
+        function updatePortraitElements(time) {
+            // Find portrait elements
+            const featuresGroup = document.getElementById('portrait-features');
+            const backgroundGroup = document.getElementById('portrait-background');
+            
+            if (!featuresGroup || !backgroundGroup) return;
+            
+            // Get all paths
+            const featurePaths = featuresGroup.querySelectorAll('path');
+            const bgPaths = backgroundGroup.querySelectorAll('path');
+            
+            // Calculate phase value for sequential effects
+            const phase = Math.sin(time * 0.7) * 0.5 + 0.5;
+            
+            // Apply sequential transformations to feature paths
+            featurePaths.forEach((path, index) => {
+                // Create a sequential phase offset based on path index
+                const pathPhase = (index / featurePaths.length) * Math.PI * 2;
+                const pathEffect = Math.sin(time * 0.5 + pathPhase) * 0.5 + 0.5;
+                
+                // Apply subtle scale effect based on block data
+                const scale = 1 + (pathEffect * effectState.pressureLevel * 0.1);
+                
+                // Apply subtle displacement effect for "pressure"
+                const tx = Math.sin(time + pathPhase) * effectState.pressureLevel * 2;
+                const ty = Math.cos(time + pathPhase) * effectState.pressureLevel * 2;
+                
+                // Apply transformations
+                path.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+            });
+            
+            // Apply sequential transformations to background paths
+            bgPaths.forEach((path, index) => {
+                // Create a sequential phase offset based on path index
+                const pathPhase = (index / bgPaths.length) * Math.PI * 2;
+                const pathEffect = Math.sin(time * 0.3 + pathPhase) * 0.5 + 0.5;
+                
+                // Apply color pulsing
+                const opacity = 0.7 + (pathEffect * 0.3);
+                path.style.opacity = opacity.toString();
+                
+                // Apply subtle transforms for movement
+                const tx = Math.sin(time * 0.4 + pathPhase) * 3 * effectState.pressureLevel;
+                const ty = Math.cos(time * 0.4 + pathPhase) * 3 * effectState.pressureLevel;
+                path.style.transform = `translate(${tx}px, ${ty}px)`;
+            });
+            
+            // Update third eye point intensity based on time since last block
+            const thirdEyePoint = document.getElementById('third-eye-point');
+            if (thirdEyePoint) {
+                const intensity = 0.5 + (effectState.dissolveLevel * 0.5);
+                thirdEyePoint.style.opacity = intensity.toString();
+            }
+        }
+        
+        // Set up event listeners
+        function setupEventListeners() {
+            // Handle window resize
+            window.addEventListener('resize', handleResize);
+            
+            // Handle visibility change (pause animation when tab is not visible)
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            
+            
+        }
+        
+        // Handle window resize
+        function handleResize() {
+            const container = document.getElementById('artwork-container');
+            const canvas = document.getElementById('effect-canvas');
+            const particleCanvas = document.getElementById('particle-canvas');
+            
+            // Calculate size based on container dimensions
+            const containerSize = Math.min(
+                container.clientWidth, 
+                container.clientHeight
+            );
+            
+            // Update canvas size
+            canvas.style.width = `${containerSize}px`;
+            canvas.style.height = `${containerSize}px`;
+            
+            particleCanvas.style.width = `${containerSize}px`;
+            particleCanvas.style.height = `${containerSize}px`;
+            
+            // Maintain canvas drawing buffer size
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = CANVAS_SIZE * dpr;
+            canvas.height = CANVAS_SIZE * dpr;
+            
+            particleCanvas.width = CANVAS_SIZE * dpr;
+            particleCanvas.height = CANVAS_SIZE * dpr;
+            
+            // Scale the context according to the DPR
+            const ctx = canvas.getContext('2d');
+            const particleCtx = particleCanvas.getContext('2d');
+            
+            ctx.scale(dpr, dpr);
+            particleCtx.scale(dpr, dpr);
+        }
+        
+        // Handle visibility change
+        function handleVisibilityChange() {
+            if (document.hidden) {
+                // Pause animation when tab is not visible
+                cancelAnimationFrame(animationFrame);
+            } else {
+                // Resume animation when tab becomes visible
+                startAnimationLoop();
+            }
+        }
+        
+        function addVisibilityState() {
+            // Add these variables to your global state
+            effectState.uiState = {
+                isInfoOverlayVisible: false,
+                areLabelsVisible: false
+            };
+        }
+
+        // 3. Update click handler to toggle info overlay
+        function updateClickHandler() {
+            // Replace your existing handleClick function or modify it
+            function handleClick(event) {
+                // Get click position relative to canvas
+                const container = document.getElementById('artwork-container');
+                const rect = container.getBoundingClientRect();
+        
+                // Convert to canvas coordinates
+                const x = (event.clientX - rect.left) * (CANVAS_SIZE / rect.width);
+                const y = (event.clientY - rect.top) * (CANVAS_SIZE / rect.height);
+        
+        // Create particle burst at click position (keep existing particle logic)
+        if (particleSystem) {
+            // Determine color based on proximity to third eye
+            const dx = x - THIRD_EYE_X;
+            const dy = y - THIRD_EYE_Y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Use color based on distance
+            const color = distance < 100 ? colors.accent2 : colors.accent1;
+            
+            // Create burst with randomized count
+            const count = Math.floor(Math.random() * 20) + 10;
+            for (let i = 0; i < count; i++) {
+                particleSystem.particles.push(
+                    particleSystem.createParticle(
+                        x + (Math.random() * 20 - 10),
+                        y + (Math.random() * 20 - 10),
+                        color
+                    )
+                );
+            }
+        }
+        
+        // Toggle info overlay visibility
+        const infoOverlay = document.getElementById('info-overlay');
+                if (infoOverlay) {
+                   effectState.uiState.isInfoOverlayVisible = !effectState.uiState.isInfoOverlayVisible;
+                   infoOverlay.style.opacity = effectState.uiState.isInfoOverlayVisible ? '1' : '0';
+                }
+            }
+    
+            // Make sure to replace the existing event listener
+            document.removeEventListener('click', handleClick); // Remove any existing handler
+            document.addEventListener('click', handleClick);
+    
+            return handleClick; // Return the function for reference
+        }
+
+        function addKeyboardHandler() {
+            function handleKeyDown(event) {
+                // Check if 'i' key was pressed
+                if (event.key.toLowerCase() === 'i') {
+                    toggleInscriptionLabels();
+                }
+            }
+    
+            function toggleInscriptionLabels() {
+                effectState.uiState.areLabelsVisible = !effectState.uiState.areLabelsVisible;
+    
+                // Get the target opacity
+                const targetOpacity = effectState.uiState.areLabelsVisible ? '0.9' : '0';
+    
+                // Find all label elements in a more reliable way
+                // 1. Toggle inscription connection labels
+                const connectionsGroup = document.getElementById('inscription-connections');
+                if (connectionsGroup) {
+                    const labels = connectionsGroup.querySelectorAll('text');
+                    labels.forEach(label => {
+                        label.style.opacity = targetOpacity;
+                    });
+                }
+    
+    // 2. Toggle sat number indicator using a more direct approach
+    const satIndicator = document.getElementById('sat-number-indicator');
+    if (satIndicator) {
+        // Remove any animations that might interfere
+        const animations = satIndicator.querySelectorAll('animate');
+        animations.forEach(anim => anim.remove());
+        
+                    // Set the opacity directly
+                    satIndicator.style.opacity = targetOpacity;
+                    satIndicator.setAttribute('opacity', targetOpacity);
+                }
+    
+                // 3. Also add a fallback method using class selector
+                const allLabelElements = document.querySelectorAll('.label-element, #sat-number-indicator');
+                allLabelElements.forEach(el => {
+                    el.style.opacity = targetOpacity;
+                    el.setAttribute('opacity', targetOpacity);
+                });
+    
+                console.log('Labels toggled:', effectState.uiState.areLabelsVisible);
+            }
+    
+            document.addEventListener('keydown', handleKeyDown);
+    
+            return { handleKeyDown, toggleInscriptionLabels }; // Return for reference
+        }
+
+        function initializeUIChanges() {
+    
+            addVisibilityState();
+            const clickHandler = updateClickHandler();
+            const keyHandlers = addKeyboardHandler();
+            
+    
+            // Add or update the setupEventListeners function
+            function setupEventListeners() {
+                // Handle window resize
+                window.addEventListener('resize', handleResize);
+        
+                // Handle visibility change
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+                // Note: click handler is already set up in updateClickHandler
+                // Note: key handler is already set up in addKeyboardHandler
+            }
+    
+            // Call this updated function if needed
+            setupEventListeners();
+        }
+        
+        // Start everything when the page loads
+        window.addEventListener('load', init);
+    </script>
+
+    <!-- Metadata for sister artwork -->
+    <script type="application/json" id="sister-artwork-metadata">
+    {
+      "title": "Blockchain Resonance",
+      "sister_artwork": true,
+      "visual_params": {
+        "color_harmonics": [0.3, 0.7, 0.5, 0.2],
+        "frequency_base": 0.42,
+        "third_eye_coords": [299.24, 194.4],
+        "particle_seeds": [42, 18, 73, 91]
+      },
+      "sat_number": 1430463027316,
+      "temporal_pattern": [3, 5, 8, 13, 21]
+    }
+</script>
+</body>
+</html>
