@@ -1,0 +1,2221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abstract CryptoText Patterns</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: monospace;
+        }
+        #canvas-container {
+            width: 576px;
+            height: 576px;
+            position: relative;
+            max-width: 100vmin;
+            max-height: 100vmin;
+        }
+        #main-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #info-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+            z-index: 4;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            opacity: 0; /* Start hidden */
+            transition: opacity 0.3s ease;
+        }
+        .corner-info {
+            position: absolute;
+            font-family: monospace;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.7);
+            z-index: 4;
+            pointer-events: none;
+        }
+        #top-left {
+            top: 15px;
+            left: 15px;
+        }
+        #top-right {
+            top: 15px;
+            right: 15px;
+            text-align: right;
+        }
+        #bottom-left {
+            bottom: 15px;
+            left: 15px;
+        }
+        #bottom-right {
+            bottom: 15px;
+            right: 15px;
+            text-align: right;
+        }
+        .loading-message {
+            color: white;
+            text-align: center;
+            padding-top: 240px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <svg id="main-svg" width="576" height="576" viewBox="0 0 576 576">
+            <defs id="pattern-defs">
+                <!-- Pattern definitions will be loaded here -->
+            </defs>
+            <rect width="576" height="576" fill="#000" id="background"></rect>
+            <text x="288" y="288" text-anchor="middle" class="loading-message" fill="white">
+                Loading blockchain-reactive artwork...
+            </text>
+            <!-- Portrait and patterns will be appended here -->
+        </svg>
+        <div id="info-overlay"></div>
+        <div id="top-left" class="corner-info"></div>
+        <div id="top-right" class="corner-info"></div>
+        <div id="bottom-left" class="corner-info"></div>
+        <div id="bottom-right" class="corner-info"></div>
+    </div>
+
+    <script>
+        // Constants and Configuration
+        const CANVAS_SIZE = 576;
+        const PORTRAIT_SIZE = 512;
+        const PORTRAIT_OFFSET = (CANVAS_SIZE - PORTRAIT_SIZE) / 2;
+        const PORTRAIT_INSCRIPTION_ID = '869585a3af3c74eec7549421cdb62cb172cbf9e5194f14a207e60c8dd683f1bei0';
+        const SATOSHI_NUMBER = 1430463027316;
+        const FRAME_PADDING = 32; // Border padding
+        
+        // CryptoText Font Inscription ID
+        const CRYPTOTEXT_FONT_INSCRIPTION_ID = '64ccc6c0865e48fe0f102f2da979c473d0d63acf1d8474d82d7aaf57a0528146i0';
+        
+        // Abstract Pattern Inscription IDs (placeholder - would be replaced with actual IDs)
+        const ABSTRACT_PATTERN_IDS = [
+            '71ed06c867f586eda32dd1039972603df38af550b8fd79b0bb8d8663feeb2fd5i0',
+            '8def4710b38532d15b9581a0f11dd5cfb50a98e3c1063bfb1fb2faacd4f1251bi0',
+            'f47045c4aafc0e33512d43872e16c8ddd95e794d19cc3be9e0e82b2770dee76ei0',
+            'f5664b1e43a4055d2f4242c8c81226a8b4fe50cfe985f3ed8508ed896f0f71e0i0',
+            '553ef38776eba727688a340f52f5e24ffe29577559612d80948eddaf277af6a5i0',
+            'c7f71274f54595947d3ed5152867e82853f99646d7f0e82664bc8cd263395851i0'
+        ];
+        
+        // SVG Namespace
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        
+        // State Variables
+        let blockData = {
+            height: 840000,
+            hash: '000000000000000000032028f3032748cef8227873ff4872689bf23f1cda83b5',
+            time: Math.floor(Date.now() / 1000),
+            merkleRoot: '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b',
+            feerate_percentiles: [1, 2, 5, 10, 20],
+            transaction_count: 3450
+        };
+        
+        let animationFrame;
+        let lastTime = 0;
+        let portraitLoaded = false;
+        let satFamilyData = null;
+        
+        // Resource Storage
+        const resources = {
+            abstractPatterns: [],
+            cryptoTextChars: {},
+            loaded: false
+        };
+        
+        // Original portrait colors to track elements
+        const portraitColors = {
+            // Red/pink colors from the portrait
+            red: [
+                '#FE5B5C', '#FF5B5C', '#F34F51', '#EF4B4D', '#F95859', 
+                '#A6090A', '#F75557', '#4E0607', '#FD5A5B', '#B33D3F', 
+                '#FB595B', '#E14042', '#F45355', '#441110', '#622222',
+                '#321112', '#FA5859', '#FC595B', '#F35253', '#A9080A',
+                '#AC090B', '#E94749', '#C52528', '#A90A0D', '#A9080B',
+                '#AD0A0C', '#9F0709', '#AC0A0D', '#B21012', '#B71415',
+                '#AF0B0D', '#511110', '#B41113', '#801F1F'
+            ],
+            // Dark/black colors from the portrait
+            black: [
+                '#010101', '#070304', '#040202', '#050204', '#0B0404',
+                '#060304', '#0D0405', '#030102', '#040203', '#050303',
+                '#080304', '#050304', '#200807', '#020102', '#060203',
+                '#050203'
+            ]
+        };
+        
+        // Pattern Layer System Structure
+        const patternSystem = {
+            // Array of pattern definitions (will be populated)
+            patterns: [],
+            // Hierarchy levels (preset configurations)
+            hierarchy: {
+                base: { updateFrequency: 'block', opacity: 0.85, scale: 1.0 },
+                middle: { updateFrequency: 'transaction', opacity: 0.7, scale: 0.8 },
+                top: { updateFrequency: 'satoshi', opacity: 0.6, scale: 0.6 }
+            },
+            // Layer types
+            types: [
+                {
+                    id: 'abstract-base',
+                    suitable: ['black', 'red'],
+                    weight: 1.0,
+                    createLayer: createAbstractBaseLayer
+                },
+                {
+                    id: 'cryptotext-middle',
+                    suitable: ['black', 'red'],
+                    weight: 0.9,
+                    createLayer: createCryptoTextMiddleLayer
+                },
+                {
+                    id: 'satoshi-top',
+                    suitable: ['black', 'red'],
+                    weight: 0.8,
+                    createLayer: createSatoshiTopLayer
+                }
+            ]
+        };
+        
+        // Color Variables
+        let currentPalette = {
+            base: '#FE5B5C',      // Primary red from portrait
+            accent1: '#00FF41',   // Matrix green
+            accent2: '#A6090A',   // Dark red from portrait
+            dark: '#010101',      // Black from portrait
+            light: '#FFFFFF',     // White for highlights
+            neutral: '#CCCCCC'    // Neutral gray
+        };
+        
+        //-----------------------------------------------
+        // Utility Functions
+        //-----------------------------------------------
+        
+        // Create a deterministic random generator from a seed
+        function seedRandom(seed) {
+            return function() {
+                seed = (seed * 9301 + 49297) % 233280;
+                return seed / 233280;
+            };
+        }
+
+        // Fix block seed generation function to use the last 8 characters instead of first 8
+function createBlockSeed(hash) {
+    // Use the last 8 characters of the hash
+    const seedHex = hash.substring(hash.length - 8);
+    const seed = parseInt(seedHex, 16);
+    console.log(`Generated block seed ${seed} from hash segment ${seedHex}`);
+    return seed || 87654321; // Fallback if somehow invalid
+}
+
+// Similarly fix merkle seed generation
+function createMerkleSeed(merkleRoot) {
+    // Use the last 8 characters of the merkle root
+    const seedHex = merkleRoot.substring(merkleRoot.length - 8);
+    const seed = parseInt(seedHex, 16);
+    console.log(`Generated merkle seed ${seed} from root segment ${seedHex}`);
+    return seed || 12345678; // Fallback if somehow invalid
+}
+
+        // Generate a seed from satoshi number
+        function createSatoshiSeed() {
+            return parseInt(SATOSHI_NUMBER.toString().substring(0, 8));
+        }
+
+        // Convert hex color to HSL
+        function hexToHSL(hex) {
+            // Remove # if present
+            hex = hex.replace(/^#/, '');
+            
+            // Convert hex to RGB
+            let r = parseInt(hex.substring(0, 2), 16) / 255;
+            let g = parseInt(hex.substring(2, 4), 16) / 255;
+            let b = parseInt(hex.substring(4, 6), 16) / 255;
+            
+            // Find greatest and smallest values
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            
+            if (max === min) {
+                h = s = 0; // achromatic
+            } else {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                
+                h /= 6;
+            }
+            
+            // Return HSL values
+            return { 
+                h: Math.round(h * 360), 
+                s: Math.round(s * 100), 
+                l: Math.round(l * 100) 
+            };
+        }
+
+        // Get a hex color from HSL values
+        function hslToHex(h, s, l) {
+            h /= 360;
+            s /= 100;
+            l /= 100;
+            let r, g, b;
+            
+            if (s === 0) {
+                r = g = b = l; // achromatic
+            } else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1/6) return p + (q - p) * 6 * t;
+                    if (t < 1/2) return q;
+                    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                    return p;
+                };
+                
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                const p = 2 * l - q;
+                
+                r = hue2rgb(p, q, h + 1/3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1/3);
+            }
+            
+            // Convert to hex
+            const toHex = c => {
+                const hex = Math.round(c * 255).toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+            };
+            
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        }
+
+        // Adjust a hex color (brighten or darken)
+        function adjustColor(hex, amount) {
+            const hsl = hexToHSL(hex);
+            // Adjust lightness but keep it within 0-100%
+            const newL = Math.max(0, Math.min(100, hsl.l + amount));
+            return hslToHex(hsl.h, hsl.s, newL);
+        }
+
+        // Create an SVG element with attributes
+        function createSVGElement(tag, attributes = {}) {
+            const element = document.createElementNS(SVG_NS, tag);
+            for (const [key, value] of Object.entries(attributes)) {
+                element.setAttribute(key, value);
+            }
+            return element;
+        }
+
+        //-----------------------------------------------
+        // Color System
+        //-----------------------------------------------
+        
+        function generatePalette(merkleRoot) {
+    // Use the merkle root to seed our random generator
+    const seed = createMerkleSeed(merkleRoot);
+    const random = seedRandom(seed);
+    
+    // Extract more entropy from merkle root for direct color influence
+    // Use the last 6 chars of merkle root for color base (avoids leading zeros)
+    const colorBase = merkleRoot.substring(merkleRoot.length - 6);
+    console.log(`Using color base from merkle root: #${colorBase}`);
+    
+    // Create base color directly from merkle root
+    const baseColor = `#${colorBase}`;
+    
+    // Extract HSL from this color
+    const baseHSL = hexToHSL(baseColor);
+    console.log(`Base HSL: h=${baseHSL.h}, s=${baseHSL.s}, l=${baseHSL.l}`);
+    
+    // Create a harmonious palette:
+    // Complementary color (opposite on color wheel) for accent1
+    const accent1Hue = (baseHSL.h + 180) % 360;
+    // Analogous color (nearby on wheel) for accent2 
+    const accent2Hue = (baseHSL.h + 30) % 360;
+    
+    // Create color variations with different saturations and lightness
+    const accent1 = hslToHex(accent1Hue, 70, 60);
+    // For second accent, use another part of merkle root
+    const accent2Base = merkleRoot.substring(merkleRoot.length - 12, merkleRoot.length - 6);
+    const accent2 = `#${accent2Base}`;
+    
+    // Create dark and light versions based on the base
+    const dark = hslToHex(baseHSL.h, 80, 15);
+    const light = hslToHex(baseHSL.h, 30, 85);
+    const neutral = hslToHex(baseHSL.h, 10, 75);
+    
+    const palette = {
+        base: baseColor, 
+        accent1, 
+        accent2, 
+        dark, 
+        light, 
+        neutral 
+    };
+    
+    console.log("Generated new color palette:", palette);
+    return palette;
+}
+        
+        //-----------------------------------------------
+        // Resource Loading
+        //-----------------------------------------------
+        
+        // Load abstract pattern SVGs
+        // In loadAbstractPatterns function, modify the pattern creation:
+async function loadAbstractPatterns() {
+    try {
+        // For each pattern ID, fetch the SVG content
+        const abstractPatternPromises = ABSTRACT_PATTERN_IDS.map(async (id, index) => {
+            try {
+                // In a blockchain environment, fetch from the inscription
+                const response = await fetch(`/content/${id}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch pattern ${index} from inscription ${id}`);
+                }
+                const svgContent = await response.text();
+                
+                // Process the SVG to ensure pattern IDs are unique
+                const processedSvg = processSvgPatterns(svgContent, index);
+                
+                return { id, svg: processedSvg, index };
+            } catch (fetchError) {
+                console.warn(`Error fetching pattern ${index}, using fallback:`, fetchError);
+                // If fetching fails, use our hardcoded SVG patterns as fallback
+                const fallbackSvg = getAbstractPatternSVG(index);
+                const processedSvg = processSvgPatterns(fallbackSvg, index);
+                return { id, svg: processedSvg, index };
+            }
+        });
+        
+        // Wait for all patterns to load
+        resources.abstractPatterns = await Promise.all(abstractPatternPromises);
+        
+        console.log(`Loaded ${resources.abstractPatterns.length} abstract patterns`);
+        return true;
+    } catch (error) {
+        console.error('Error loading abstract patterns:', error);
+        // Use fallback patterns if loading fails
+        resources.abstractPatterns = ABSTRACT_PATTERN_IDS.map((id, index) => {
+            const fallbackSvg = getAbstractPatternSVG(index);
+            const processedSvg = processSvgPatterns(fallbackSvg, index);
+            return { id, svg: processedSvg, index };
+        });
+        return false;
+    }
+}
+
+// New function to process SVG patterns and make IDs unique
+function processSvgPatterns(svgContent, index) {
+    // Parse the SVG
+    const parser = new DOMParser();
+    const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
+    
+    // Find all patterns and make their IDs unique
+    const patterns = svgDoc.querySelectorAll('pattern');
+    patterns.forEach(pattern => {
+        const originalId = pattern.id;
+        const newId = `resource-pattern-${index}-${originalId}`;
+        pattern.id = newId;
+        
+        // Update any references to this pattern in the SVG
+        const refs = svgDoc.querySelectorAll(`[fill="url(#${originalId})"]`);
+        refs.forEach(ref => {
+            ref.setAttribute('fill', `url(#${newId})`);
+        });
+        
+        console.log(`Renamed pattern ID from ${originalId} to ${newId}`);
+    });
+    
+    // Serialize back to string
+    return new XMLSerializer().serializeToString(svgDoc);
+}
+        
+        // Hard-coded SVG pattern content from the project file
+        function getAbstractPatternSVG(index) {
+            // These are simplified versions of the patterns for demonstration
+            const patterns = [
+                // Pattern 1: Simple blockchain representation
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#1a237e" />
+                  <g fill="none" stroke="#ffd54f" stroke-width="2">
+                    <circle cx="30" cy="50" r="20" />
+                    <path d="M50,50 L90,50 M70,40 L70,60 M80,40 L80,60" />
+                  </g>
+                </svg>`,
+                
+                // Pattern 2: Grid-based layout
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#0f0f23" />
+                  <g fill="none" stroke="#4fc3f7" stroke-width="2">
+                    <path d="M20,20 L80,20 L80,80 L20,80 Z" />
+                    <path d="M35,35 L65,35 L65,65 L35,65 Z" />
+                    <line x1="20" y1="50" x2="35" y2="50" />
+                    <line x1="65" y1="50" x2="80" y2="50" />
+                    <line x1="50" y1="20" x2="50" y2="35" />
+                    <line x1="50" y1="65" x2="50" y2="80" />
+                  </g>
+                  <circle cx="50" cy="50" r="5" fill="#ffeb3b" />
+                </svg>`,
+                
+                // Pattern 3: Wave pattern
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#01579b" />
+                  <path
+                    d="M0,50 Q25,25 50,50 T100,50"
+                    fill="none"
+                    stroke="#29b6f6"
+                    stroke-width="2"
+                  />
+                  <g fill="#29b6f6">
+                    <circle cx="0" cy="50" r="3" />
+                    <circle cx="25" cy="25" r="3" />
+                    <circle cx="50" cy="50" r="3" />
+                    <circle cx="75" cy="75" r="3" />
+                    <circle cx="100" cy="50" r="3" />
+                  </g>
+                </svg>`,
+                
+                // Pattern 4: Network diagram
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#263238" />
+                  <g fill="#4caf50">
+                    <circle cx="50" cy="50" r="5" />
+                    <circle cx="20" cy="20" r="5" />
+                    <circle cx="80" cy="20" r="5" />
+                    <circle cx="20" cy="80" r="5" />
+                    <circle cx="80" cy="80" r="5" />
+                  </g>
+                  <g stroke="#81c784" stroke-width="1">
+                    <line x1="50" y1="50" x2="20" y2="20" />
+                    <line x1="50" y1="50" x2="80" y2="20" />
+                    <line x1="50" y1="50" x2="20" y2="80" />
+                    <line x1="50" y1="50" x2="80" y2="80" />
+                  </g>
+                </svg>`,
+                
+                // Pattern 5: Fluid horizon/landscape
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                  <path
+                    id="horizonPath"
+                    d="M0 70 Q25 20 50 50 T100 30 V100 H0 Z"
+                    fill="#3a7ca5"
+                  />
+                </svg>`,
+                
+                // Pattern 6: Dot grid background
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                  <defs>
+                    <pattern
+                      id="backgroundPattern"
+                      x="0"
+                      y="0"
+                      width="20"
+                      height="20"
+                      patternUnits="userSpaceOnUse"
+                    >
+                      <circle cx="10" cy="10" r="1.5" fill="#ffffff" opacity="0.5" />
+                      <path
+                        d="M0 10 H20 M10 0 V20"
+                        stroke="#ffffff"
+                        stroke-width="0.5"
+                        opacity="0.3"
+                      />
+                    </pattern>
+                  </defs>
+                  <rect width="100" height="100" fill="#0a2472" />
+                  <rect width="100" height="100" fill="url(#backgroundPattern)" />
+                </svg>`
+            ];
+            
+            return patterns[index % patterns.length];
+        }
+        
+        // Load CryptoText Font
+        async function loadCryptoTextFont() {
+    try {
+        // Try to fetch the font SVG from the inscription
+        const response = await fetch(`/content/${CRYPTOTEXT_FONT_INSCRIPTION_ID}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch CryptoText font from inscription ${CRYPTOTEXT_FONT_INSCRIPTION_ID}`);
+        }
+        
+        const fontSvgContent = await response.text();
+        
+        // Parse the SVG to extract character elements
+        const parser = new DOMParser();
+        const fontSvgDoc = parser.parseFromString(fontSvgContent, 'image/svg+xml');
+        
+        // Based on the CryptoText SVG Font Standard structure
+        // The SVG has a viewBox of "0 0 1200 800" and characters are organized in specific groups
+        
+        // Extract character elements by their positions
+        extractUppercaseLetters(fontSvgDoc);
+        extractNumbers(fontSvgDoc);
+        extractSpecialCharacters(fontSvgDoc);
+        
+        console.log(`Loaded ${Object.keys(resources.cryptoTextChars).length} CryptoText characters`);
+        return true;
+    } catch (error) {
+        console.error('Error loading CryptoText font:', error);
+        
+        // If loading fails, use simulated characters
+        fallbackToSimulatedChars();
+        return false;
+    }
+}
+
+// Extract uppercase letters A-Z from the font SVG
+function extractUppercaseLetters(fontSvgDoc) {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    
+    // Looking at the SVG structure, letters are in groups with transforms
+    // There are specific groups at these locations in the SVG
+    
+    // First, find the main transform group where letters are located
+    // In the SVG, uppercase letters are at transform="translate(40,100)"
+    const letterGroup = findGroupByTransform(fontSvgDoc, 40, 100);
+    
+    if (!letterGroup) {
+        console.warn("Couldn't find main letter group, falling back to simulated letters");
+        letters.split('').forEach(char => {
+            resources.cryptoTextChars[char] = createSimulatedCharPath(char);
+        });
+        return;
+    }
+    
+    // Now extract individual letter groups within this main group
+    // According to SVG Font Standard, letters are in a grid layout:
+    // - Each row has 7 letters
+    // - The grid starts at (0,0) within the letter group
+    // - Each letter cell is 80px wide (horizontally) and 120px tall (vertically)
+    
+    // For each letter, find its position in the grid
+    letters.split('').forEach((char, index) => {
+        const row = Math.floor(index / 7);
+        const col = index % 7;
+        
+        // Calculate expected position
+        const x = col * 80;
+        const y = row * 120;
+        
+        // Find the letter group at this position
+        const charGroup = findGroupByTransform(letterGroup, x, y);
+        
+        if (charGroup) {
+            // Extract the character elements
+            extractCharacter(char, charGroup);
+        } else {
+            console.warn(`Character ${char} not found at expected position, using fallback`);
+            resources.cryptoTextChars[char] = createSimulatedCharPath(char);
+        }
+    });
+}
+
+// Extract numbers 0-9 from the font SVG
+function extractNumbers(fontSvgDoc) {
+    const numbers = '0123456789';
+    
+    // In the SVG Font Standard, numbers are at transform="translate(600,100)"
+    const numberGroup = findGroupByTransform(fontSvgDoc, 600, 100);
+    
+    if (!numberGroup) {
+        console.warn("Couldn't find main number group, falling back to simulated numbers");
+        numbers.split('').forEach(num => {
+            resources.cryptoTextChars[num] = createSimulatedCharPath(num);
+        });
+        return;
+    }
+    
+    // Numbers are laid out in a single row or possibly two rows
+    numbers.split('').forEach((num, index) => {
+        const row = Math.floor(index / 10);
+        const col = index % 10;
+        
+        // Calculate expected position
+        const x = col * 80;
+        const y = row * 120;
+        
+        // Find the number group at this position
+        const numGroup = findGroupByTransform(numberGroup, x, y);
+        
+        if (numGroup) {
+            // Extract the character elements
+            extractCharacter(num, numGroup);
+        } else {
+            console.warn(`Number ${num} not found at expected position, using fallback`);
+            resources.cryptoTextChars[num] = createSimulatedCharPath(num);
+        }
+    });
+}
+
+// Extract special characters from the font SVG
+function extractSpecialCharacters(fontSvgDoc) {
+    // Special characters like ., ,, !, ?, :, -, +, /, @, etc.
+    const specialChars = '.,:!?-+/@\'';
+    
+    // In the SVG Font Standard, special characters are at transform="translate(600,240)"
+    const specialGroup = findGroupByTransform(fontSvgDoc, 600, 240);
+    
+    if (!specialGroup) {
+        console.warn("Couldn't find special characters group, using only letters and numbers");
+        return;
+    }
+    
+    // Special characters layout - similar to numbers but may have a different arrangement
+    specialChars.split('').forEach((char, index) => {
+        const row = Math.floor(index / 7);
+        const col = index % 7;
+        
+        // Calculate expected position
+        const x = col * 80;
+        const y = row * 120;
+        
+        // Find the character group at this position
+        const charGroup = findGroupByTransform(specialGroup, x, y);
+        
+        if (charGroup) {
+            // Extract the character elements
+            extractCharacter(char, charGroup);
+        }
+    });
+}
+
+// Helper function to find a group by its transform attribute
+function findGroupByTransform(parentElement, x, y, errorMargin = 20) {
+    // If parentElement is null, return null
+    if (!parentElement) return null;
+    
+    // First, check if the parent itself has a matching transform
+    if (parentElement.nodeType === Node.ELEMENT_NODE && parentElement.hasAttribute('transform')) {
+        const transform = parentElement.getAttribute('transform');
+        const translateMatch = transform.match(/translate\s*\(\s*([0-9.-]+)(?:\s*,\s*|\s+)([0-9.-]+)\s*\)/);
+        
+        if (translateMatch) {
+            const tx = parseFloat(translateMatch[1]);
+            const ty = parseFloat(translateMatch[2]);
+            
+            if (Math.abs(tx - x) < errorMargin && Math.abs(ty - y) < errorMargin) {
+                return parentElement;
+            }
+        }
+    }
+    
+    // Then check all child groups
+    const groups = parentElement.querySelectorAll(':scope > g[transform]');
+    
+    for (const group of groups) {
+        const transform = group.getAttribute('transform');
+        const translateMatch = transform.match(/translate\s*\(\s*([0-9.-]+)(?:\s*,\s*|\s+)([0-9.-]+)\s*\)/);
+        
+        if (translateMatch) {
+            const tx = parseFloat(translateMatch[1]);
+            const ty = parseFloat(translateMatch[2]);
+            
+            if (Math.abs(tx - x) < errorMargin && Math.abs(ty - y) < errorMargin) {
+                return group;
+            }
+        }
+    }
+    
+    return null;
+}
+
+// Extract a character from a group and store it in resources
+function extractCharacter(char, group) {
+    // Create a new SVG to contain this character
+    const charSvg = document.createElementNS(SVG_NS, 'svg');
+    charSvg.setAttribute('viewBox', '0 0 40 80'); // Standard character viewBox
+    
+    // Clone the group content - we need to adjust the transform
+    const clonedGroup = group.cloneNode(true);
+    
+    // If the group has a transform, we need to adjust it relative to our new viewBox
+    if (clonedGroup.hasAttribute('transform')) {
+        // Remove the transform attribute - we'll center the content
+        clonedGroup.removeAttribute('transform');
+    }
+    
+    // Add the group to the SVG
+    charSvg.appendChild(clonedGroup);
+    
+    // Store the SVG string for this character
+    resources.cryptoTextChars[char] = new XMLSerializer().serializeToString(charSvg);
+}
+
+// Fallback to simulated characters if font loading fails
+function fallbackToSimulatedChars() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:!?-+/@\'';
+    chars.split('').forEach(char => {
+        resources.cryptoTextChars[char] = createSimulatedCharPath(char);
+    });
+}
+        
+        // Create a simulated character path for testing
+        function createSimulatedCharPath(char) {
+            // Base measurements for character paths
+            const width = 40;
+            const height = 80;
+            
+            // Create different paths based on character type
+            let path = '';
+            
+            if ('0123456789'.includes(char)) {
+                // Number paths
+                switch (char) {
+                    case '0':
+                        path = `M 5 20 A 15 30 0 0 1 35 20 V 60 A 15 30 0 0 1 5 60 V 20 Z`;
+                        break;
+                    case '1':
+                        path = `M 20 10 L 20 70 M 10 20 L 20 10 L 30 20`;
+                        break;
+                    default:
+                        path = `M 5 20 H 35 V 70 H 5 Z`;
+                }
+            } else {
+                // Letter paths
+                switch (char) {
+                    case 'A':
+                        path = `M 5 70 L 20 10 L 35 70 M 10 45 L 30 45`;
+                        break;
+                    case 'B':
+                        path = `M 5 10 V 70 H 25 A 10 10 0 0 0 25 50 H 5 M 5 10 H 25 A 10 10 0 0 1 25 30 H 5`;
+                        break;
+                    case 'C':
+                        path = `M 35 20 A 15 15 0 0 0 5 40 A 15 15 0 0 0 35 60`;
+                        break;
+                    default:
+                        path = `M 5 10 H 35 V 70 H 5 Z`;
+                }
+            }
+            
+            // Create SVG for this character
+            const svgContent = `
+                <svg xmlns="${SVG_NS}" viewBox="0 0 ${width} ${height}">
+                    <path d="${path}" stroke="#FFFFFF" stroke-width="4" fill="none" />
+                    <circle cx="${width/2}" cy="${height/2}" r="2" fill="#00FF41" />
+                </svg>
+            `;
+            
+            return svgContent;
+        }
+        
+        // Add patterns to defs
+        function addResourcesToSVG() {
+            const defs = document.getElementById('pattern-defs');
+            
+            // First clear existing defs
+            while (defs.firstChild) {
+                defs.removeChild(defs.firstChild);
+            }
+            
+            // Add abstract patterns
+            resources.abstractPatterns.forEach(pattern => {
+                // Parse SVG content
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(pattern.svg, 'image/svg+xml');
+                const svgElement = svgDoc.documentElement;
+                
+                // Create group to hold this pattern and set ID
+                const group = createSVGElement('g', {
+                    id: `abstract-pattern-${pattern.index}`
+                });
+                
+                // Clone and append all children of the SVG
+                Array.from(svgElement.childNodes).forEach(child => {
+                    if (child.nodeType === Node.ELEMENT_NODE) {
+                        group.appendChild(child.cloneNode(true));
+                    }
+                });
+                
+                defs.appendChild(group);
+            });
+            
+            // Add CryptoText characters
+            for (const [char, svgContent] of Object.entries(resources.cryptoTextChars)) {
+                // Parse SVG content
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
+                const svgElement = svgDoc.documentElement;
+                
+                // Create group for this character
+                const group = createSVGElement('g', {
+                    id: `cryptotext-char-${char}`
+                });
+                
+                // Clone and append all children of the SVG
+                Array.from(svgElement.childNodes).forEach(child => {
+                    if (child.nodeType === Node.ELEMENT_NODE) {
+                        group.appendChild(child.cloneNode(true));
+                    }
+                });
+                
+                defs.appendChild(group);
+            }
+            
+            // Mark resources as loaded
+            resources.loaded = true;
+        }
+        
+        //-----------------------------------------------
+        // Layer Creation Functions
+        //-----------------------------------------------
+        
+        // Create Abstract Base Layer
+        function createAbstractBaseLayer(params) {
+    const { id, seed, hierarchy, targetElement } = params;
+    const random = seedRandom(seed);
+    
+    // Select which abstract pattern to use based on seed
+    // Use the seed to create more variability
+    const patternIndex = Math.floor(random() * resources.abstractPatterns.length);
+    
+    // Add more randomness to rotation based on seed
+    const rotation = Math.floor(random() * 360); // 0-359 degrees
+    
+    console.log(`Creating ${targetElement} base pattern with index ${patternIndex} from seed ${seed}, rotation ${rotation}°`);
+    
+    // Create pattern element
+    const pattern = createSVGElement('pattern', {
+        id: id,
+        width: '100',
+        height: '100',
+        patternUnits: 'userSpaceOnUse',
+        patternTransform: `rotate(${rotation})`
+    });
+    
+    // Use the abstract pattern as the base layer
+    const useElement = createSVGElement('use', {
+        href: `#abstract-pattern-${patternIndex}`,
+        width: '100',
+        height: '100',
+        opacity: hierarchy.opacity.toString()
+    });
+    
+    pattern.appendChild(useElement);
+    
+    // Add animation based on transaction count
+    const txInfluence = Math.min(blockData.transaction_count / 5000, 1);
+    if (txInfluence > 0.5 && hierarchy.updateFrequency !== 'block') {
+        // Add rotation animation for higher transaction counts
+        const rotateAnimation = createSVGElement('animateTransform', {
+            attributeName: 'patternTransform',
+            type: 'rotate',
+            from: `${rotation} 50 50`,
+            to: `${rotation + (txInfluence * 360)} 50 50`,
+            dur: `${20 / txInfluence}s`,
+            repeatCount: 'indefinite'
+        });
+        
+        pattern.appendChild(rotateAnimation);
+    }
+    
+    return pattern;
+}
+        
+        function createCryptoTextMiddleLayer(params) {
+    const { id, seed, hierarchy, targetElement } = params;
+    const random = seedRandom(seed);
+    
+    // Size based on hierarchy scale
+    const patternSize = 100 * hierarchy.scale;
+    
+    // Create pattern element
+    const pattern = createSVGElement('pattern', {
+        id: id,
+        width: patternSize.toString(),
+        height: patternSize.toString(),
+        patternUnits: 'userSpaceOnUse'
+    });
+    
+    // Modified: Use the LAST 6 characters from the block hash instead of first 6
+    // This avoids the leading zero problem
+    const hashSubset = blockData.hash.substring(blockData.hash.length - 6);
+    console.log(`Using hash subset: ${hashSubset} (from end of block hash)`);
+    
+    // Convert hex characters to array of uppercase letters and numbers
+    const chars = hashSubset.split('').map(char => {
+        const code = parseInt(char, 16);
+        // Convert to A-P for 0-15 (hex digits)
+        return code < 10 ? String(code) : String.fromCharCode(55 + code);
+    });
+    
+    console.log(`Creating ${targetElement} middle layer with characters: ${chars.join('')}`);
+    
+    // Rest of function remains the same...
+            
+            // Layout characters differently based on element type
+            if (targetElement === 'black') {
+                // Circular arrangement for black elements
+                chars.forEach((char, i) => {
+                    const angle = (i / chars.length) * Math.PI * 2;
+                    const radius = patternSize * 0.3;
+                    const x = patternSize/2 + Math.cos(angle) * radius;
+                    const y = patternSize/2 + Math.sin(angle) * radius;
+                    
+                    // Calculate size based on hierarchy
+                    const charSize = patternSize * 0.2 * hierarchy.scale;
+                    
+                    // Use the CryptoText character
+                    const useElement = createSVGElement('use', {
+                        href: `#cryptotext-char-${char}`,
+                        x: (x - charSize/2).toString(),
+                        y: (y - charSize/2).toString(),
+                        width: charSize.toString(),
+                        height: charSize.toString(),
+                        opacity: hierarchy.opacity.toString(),
+                        transform: `rotate(${angle * (180/Math.PI)} ${x} ${y})`
+                    });
+                    
+                    pattern.appendChild(useElement);
+                });
+                
+                // Add connecting lines between characters
+                let path = '';
+                for (let i = 0; i < chars.length; i++) {
+                    const angle1 = (i / chars.length) * Math.PI * 2;
+                    const angle2 = ((i + 1) % chars.length / chars.length) * Math.PI * 2;
+                    const radius = patternSize * 0.3;
+                    const x1 = patternSize/2 + Math.cos(angle1) * radius;
+                    const y1 = patternSize/2 + Math.sin(angle1) * radius;
+                    const x2 = patternSize/2 + Math.cos(angle2) * radius;
+                    const y2 = patternSize/2 + Math.sin(angle2) * radius;
+                    
+                    path += `M ${x1} ${y1} L ${x2} ${y2} `;
+                }
+                
+                // Create the connecting lines
+                const connectors = createSVGElement('path', {
+                    d: path,
+                    stroke: targetElement === 'black' ? currentPalette.accent1 : currentPalette.accent2,
+                    'stroke-width': '1',
+                    fill: 'none',
+                    'stroke-dasharray': '2,2',
+                    opacity: '0.5'
+                });
+                
+                pattern.appendChild(connectors);
+            } else {
+                // Grid arrangement for red elements
+                const gridSize = Math.ceil(Math.sqrt(chars.length));
+                const cellSize = patternSize / gridSize;
+                
+                chars.forEach((char, i) => {
+                    const row = Math.floor(i / gridSize);
+                    const col = i % gridSize;
+                    const x = col * cellSize;
+                    const y = row * cellSize;
+                    
+                    // Calculate size based on hierarchy
+                    const charSize = cellSize * 0.8;
+                    
+                    // Use the CryptoText character
+                    const useElement = createSVGElement('use', {
+                        href: `#cryptotext-char-${char}`,
+                        x: (x + cellSize*0.1).toString(),
+                        y: (y + cellSize*0.1).toString(),
+                        width: charSize.toString(),
+                        height: charSize.toString(),
+                        opacity: hierarchy.opacity.toString()
+                    });
+                    
+                    pattern.appendChild(useElement);
+                });
+                
+                // Add grid lines for red elements
+                for (let i = 0; i <= gridSize; i++) {
+                    // Vertical line
+                    const vLine = createSVGElement('line', {
+                        x1: (i * cellSize).toString(),
+                        y1: '0',
+                        x2: (i * cellSize).toString(),
+                        y2: patternSize.toString(),
+                        stroke: currentPalette.accent2,
+                        'stroke-width': '0.5',
+                        opacity: '0.3'
+                    });
+                    
+                    // Horizontal line
+                    const hLine = createSVGElement('line', {
+                        x1: '0',
+                        y1: (i * cellSize).toString(),
+                        x2: patternSize.toString(),
+                        y2: (i * cellSize).toString(),
+                        stroke: currentPalette.accent2,
+                        'stroke-width': '0.5',
+                        opacity: '0.3'
+                    });
+                    
+                    pattern.appendChild(vLine);
+                    pattern.appendChild(hLine);
+                }
+            }
+            
+            // Add animation based on fee rate
+            const feeInfluence = Math.min((blockData.feerate_percentiles ? blockData.feerate_percentiles[2] : 5) / 20, 1);
+            if (feeInfluence > 0.3 && hierarchy.updateFrequency !== 'block') {
+                // For medium fee rates, add subtle pulse animation
+                const pulseAnimation = createSVGElement('animate', {
+                    attributeName: 'opacity',
+                    values: `${hierarchy.opacity * 0.7};${hierarchy.opacity};${hierarchy.opacity * 0.7}`,
+                    dur: `${8 - feeInfluence * 5}s`,
+                    repeatCount: 'indefinite'
+                });
+                
+                pattern.appendChild(pulseAnimation);
+            }
+            
+            return pattern;
+        }
+        
+        // Create Satoshi top layer
+        function createSatoshiTopLayer(params) {
+            const { id, seed, hierarchy, targetElement } = params;
+            // For Satoshi layer, use the satoshi number as the seed for consistency
+            const satoshiSeed = createSatoshiSeed();
+            const random = seedRandom(satoshiSeed);
+            
+            // Create pattern element
+            const patternSize = 100 * hierarchy.scale;
+            const pattern = createSVGElement('pattern', {
+                id: id,
+                width: patternSize.toString(),
+                height: patternSize.toString(),
+                patternUnits: 'userSpaceOnUse',
+                patternTransform: `rotate(${random() * 45})`
+            });
+            
+            // Create a unique geometric signature pattern from the satoshi number
+            // Use the digits of the satoshi number to influence the pattern
+            const satoshiDigits = SATOSHI_NUMBER.toString().split('').map(Number);
+            
+            // Center of pattern
+            const centerX = patternSize / 2;
+            const centerY = patternSize / 2;
+            
+            // Main signature shape based on first 4 digits
+            const mainRadius = (patternSize / 4) * (0.8 + (satoshiDigits[0] / 10) * 0.4);
+            const points = Math.max(3, satoshiDigits[1] % 7 + 3); // 3-9 points
+            const inset = 0.3 + (satoshiDigits[2] / 10) * 0.4; // How much to inset alternate points
+            const rotation = (satoshiDigits[3] / 10) * Math.PI; // Rotation angle
+            
+            // Create signature "star" shape
+            let signaturePath = '';
+            for (let i = 0; i < points * 2; i++) {
+                const angle = (i * Math.PI / points) + rotation;
+                const radius = i % 2 === 0 ? mainRadius : mainRadius * inset;
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                
+                if (i === 0) {
+                    signaturePath += `M ${x} ${y} `;
+                } else {
+                    signaturePath += `L ${x} ${y} `;
+                }
+            }
+            
+            signaturePath += 'Z'; // Close the path
+            
+            // Add the signature shape
+            const signatureShape = createSVGElement('path', {
+                d: signaturePath,
+                fill: 'none',
+                stroke: targetElement === 'black' ? currentPalette.accent1 : currentPalette.accent2,
+                'stroke-width': '1',
+                opacity: hierarchy.opacity.toString()
+            });
+            
+            pattern.appendChild(signatureShape);
+            
+            // Add characteristic dots at specific positions based on remaining digits
+            const dotCount = Math.max(3, Math.min(satoshiDigits[4] % 8 + 3, 10)); // 3-10 dots
+            const dotRadius = patternSize / 20;
+            
+            for (let i = 0; i < dotCount; i++) {
+                // Use consistent positions for dots across family
+                const angle = (i / dotCount) * Math.PI * 2 + (satoshiDigits[5] / 10) * Math.PI;
+                const radius = mainRadius * 1.2;
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                
+                // Create dot
+                const dot = createSVGElement('circle', {
+                    cx: x.toString(),
+                    cy: y.toString(),
+                    r: dotRadius.toString(),
+                    fill: targetElement === 'black' ? currentPalette.base : currentPalette.light,
+                    opacity: hierarchy.opacity.toString()
+                });
+                
+                // Add subtle pulse animation to dots
+                const pulseAnimation = createSVGElement('animate', {
+                    attributeName: 'opacity',
+                    values: `${hierarchy.opacity * 0.6};${hierarchy.opacity};${hierarchy.opacity * 0.6}`,
+                    dur: `${3 + i}s`,
+                    repeatCount: 'indefinite'
+                });
+                
+                dot.appendChild(pulseAnimation);
+                pattern.appendChild(dot);
+            }
+            
+            return pattern;
+        }
+        
+        //-----------------------------------------------
+        // Pattern System Implementation
+        //-----------------------------------------------
+        
+        function initPatternSystem() {
+    const patternDefs = document.getElementById('pattern-defs');
+    
+    // Clear existing patterns first
+    patternSystem.patterns = [];
+    
+    // Create seeds from blockchain data - with improved seed generation
+    const blockSeed = createBlockSeed(blockData.hash);
+    const merkleSeed = createMerkleSeed(blockData.merkleRoot);
+    const satoshiSeed = createSatoshiSeed();
+    
+    console.log(`Using seeds - Block: ${blockSeed}, Merkle: ${merkleSeed}, Satoshi: ${satoshiSeed}`);
+    
+    // Only initialize if resources are loaded
+    if (!resources.loaded) {
+        console.warn('Resources not loaded yet, skipping pattern initialization');
+        return;
+    }
+    
+    // Create pattern IDs function - Modified to include the appropriate seed
+    const generatePatternId = (level, type, target, currentSeed) => 
+        `pattern-${level}-${type}-${target}-block${blockData.height}-seed${currentSeed % 10000}`;
+    
+    // Create layered patterns for each hierarchy level and target element type
+    const hierarchyLevels = Object.keys(patternSystem.hierarchy);
+    const targetTypes = ['black', 'red'];
+    
+    // Generate patterns for each combination
+    let patternCount = 0;
+    hierarchyLevels.forEach(level => {
+        const hierarchy = patternSystem.hierarchy[level];
+        
+        targetTypes.forEach(target => {
+            // Select appropriate layer type
+            const layerType = patternSystem.types.find(t => 
+                t.id === `${level === 'base' ? 'abstract-base' : 
+                           level === 'middle' ? 'cryptotext-middle' : 
+                           'satoshi-top'}`);
+            
+            if (!layerType) {
+                console.warn(`Layer type not found for level: ${level}`);
+                return;
+            }
+            
+            // Get seed based on hierarchy level
+            const currentSeed = level === 'base' ? blockSeed : 
+                       level === 'middle' ? merkleSeed : satoshiSeed;
+            
+            // Create pattern ID with the current seed for this level
+            const patternId = generatePatternId(level, layerType.id, target, currentSeed);
+            
+            // Create the layer pattern
+            const pattern = layerType.createLayer({
+                id: patternId,
+                seed: currentSeed,
+                hierarchy: {
+                    ...hierarchy,
+                    level
+                },
+                targetElement: target
+            });
+            
+            // Register and add to DOM
+            patternSystem.patterns.push({
+                id: patternId,
+                level,
+                type: layerType.id,
+                target,
+                element: pattern
+            });
+            
+            patternDefs.appendChild(pattern);
+            patternCount++;
+        });
+    });
+    
+    console.log(`Created ${patternCount} layered patterns for block ${blockData.height}`);
+}
+        
+        // Apply patterns to portrait elements
+        function applyPatterns() {
+            if (!window.portraitElements) {
+                console.warn('Portrait elements not available yet');
+                return;
+            }
+            
+            // Apply patterns to each element type
+            ['black', 'red'].forEach(elementType => {
+                const elements = window.portraitElements[elementType];
+                
+                // Skip if no elements of this type
+                if (!elements || elements.length === 0) {
+                    return;
+                }
+                
+                // Create a filter to add glow effects
+                const filterId = `glow-filter-${elementType}`;
+                if (!document.getElementById(filterId)) {
+                    const defs = document.getElementById('pattern-defs');
+                    const filter = createSVGElement('filter', {
+                        id: filterId,
+                        x: '-20%',
+                        y: '-20%',
+                        width: '140%',
+                        height: '140%'
+                    });
+                    
+                    // Create filter effects
+                    const blur = createSVGElement('feGaussianBlur', {
+                        'in': 'SourceGraphic',
+                        'stdDeviation': elementType === 'black' ? '1' : '2'
+                    });
+                    
+                    const colorMatrix = createSVGElement('feColorMatrix', {
+                        type: 'matrix',
+                        values: elementType === 'black' ? 
+                            '0 0 0 0 0   0 0 0 0 0   0 0 0 0 0   0 0 0 3 0' : // black elements get darker glow
+                            '1 0 0 0 0   0 1 0 0 0   0 0 1 0 0   0 0 0 3 0'  // red elements get colored glow
+                    });
+                    
+                    // Composite the result
+                    const composite = createSVGElement('feComposite', {
+                        'in': 'SourceGraphic',
+                        operator: 'over'
+                    });
+                    
+                    filter.appendChild(blur);
+                    filter.appendChild(colorMatrix);
+                    filter.appendChild(composite);
+                    defs.appendChild(filter);
+                }
+                
+                // Find patterns for this element type
+                const basePatterns = patternSystem.patterns.filter(p => 
+                    p.level === 'base' && p.target === elementType);
+                const middlePatterns = patternSystem.patterns.filter(p => 
+                    p.level === 'middle' && p.target === elementType);
+                const topPatterns = patternSystem.patterns.filter(p => 
+                    p.level === 'top' && p.target === elementType);
+                
+                // Seed for consistent element selection
+                const seed = createBlockSeed(blockData.hash) + elementType.length;
+                const random = seedRandom(seed);
+                
+                // Apply patterns to elements
+                elements.forEach((element, index) => {
+                    // Calculate threshold values for pattern application
+                    // Large threshold for base patterns (most elements get it)
+                    const baseThreshold = 0.2; 
+                    // Medium threshold for middle patterns (about half the elements)
+                    const middleThreshold = 0.5; 
+                    // Small threshold for top patterns (only some elements)
+                    const topThreshold = 0.8; 
+                    
+                    // Consistently select elements for patterns based on index
+                    const selectionValue = random() + (index / elements.length * 0.5);
+                    
+                    // Apply multiple pattern layers to an element using pattern references
+                    let allPatternIds = [];
+                    
+                    // Apply base patterns (base layer)
+                    if (selectionValue > baseThreshold && basePatterns.length > 0) {
+                        const patternIndex = index % basePatterns.length;
+                        allPatternIds.push(basePatterns[patternIndex].id);
+                    }
+                    
+                    // Apply middle patterns
+                    if (selectionValue > middleThreshold && middlePatterns.length > 0) {
+                        const patternIndex = index % middlePatterns.length;
+                        allPatternIds.push(middlePatterns[patternIndex].id);
+                    }
+                    
+                    // Apply top patterns
+                    if (selectionValue > topThreshold && topPatterns.length > 0) {
+                        const patternIndex = index % topPatterns.length;
+                        allPatternIds.push(topPatterns[patternIndex].id);
+                    }
+                    
+                    if (allPatternIds.length > 0) {
+                        // Create the fill pattern reference
+                        // If multiple patterns, use the first as fill
+                        element.setAttribute('fill', `url(#${allPatternIds[0]})`);
+                        
+                        // Add class for easier selection
+                        element.classList.add('patterned-element');
+                        
+                        // Apply filter for glow effect
+                        element.setAttribute('filter', `url(#${filterId})`);
+                        
+                        // If more than one pattern, we need to clone the element
+                        // and layer additional patterns on top
+                        if (allPatternIds.length > 1) {
+                            const parentNode = element.parentNode;
+                            
+                            for (let i = 1; i < allPatternIds.length; i++) {
+                                // Clone original element
+                                const clone = element.cloneNode(true);
+                                
+                                // Apply different pattern
+                                clone.setAttribute('fill', `url(#${allPatternIds[i]})`);
+                                
+                                // Adjust opacity based on layer
+                                clone.setAttribute('opacity', '0.7');
+                                
+                                // Add to parent
+                                parentNode.appendChild(clone);
+                            }
+                        }
+                    } else {
+                        // For elements without patterns, apply solid colors
+                        const color = elementType === 'black' ? 
+                            currentPalette.dark : currentPalette.base;
+                        element.setAttribute('fill', color);
+                    }
+                });
+            });
+        }
+        
+        //-----------------------------------------------
+        // Portrait Loading and Processing
+        //-----------------------------------------------
+        
+        // Load portrait SVG from inscription
+        async function loadPortrait() {
+            try {
+                const mainSvg = document.getElementById('main-svg');
+                
+                // Clear loading message
+                const loadingMessage = mainSvg.querySelector('.loading-message');
+                if (loadingMessage) {
+                    mainSvg.removeChild(loadingMessage);
+                }
+                
+                console.log(`Attempting to fetch portrait from: /content/${PORTRAIT_INSCRIPTION_ID}`);
+                
+                // Check if we're in a blockchain environment
+                let svgContent;
+                try {
+                    const testFetch = await fetch('/blockheight');
+                    const isBlockchainEnvironment = testFetch.ok;
+                    
+                    if (isBlockchainEnvironment) {
+                        // We're in a blockchain environment - use recursive endpoint
+                        const response = await fetch(`/content/${PORTRAIT_INSCRIPTION_ID}`);
+                        if (!response.ok) {
+                            throw new Error(`Failed to fetch from /content/ endpoint: ${response.status}`);
+                        }
+                        svgContent = await response.text();
+                    } else {
+                        // Fallback for testing - create a basic portrait placeholder
+                        svgContent = createFallbackPortrait();
+                    }
+                } catch (error) {
+                    console.warn('Failed to check environment, using fallback:', error);
+                    svgContent = createFallbackPortrait();
+                }
+                
+                // Parse SVG content into a DOM
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
+                const portraitSvg = svgDoc.documentElement;
+                
+                // Set dimensions and position
+                portraitSvg.setAttribute('width', PORTRAIT_SIZE);
+                portraitSvg.setAttribute('height', PORTRAIT_SIZE);
+                portraitSvg.setAttribute('x', PORTRAIT_OFFSET);
+                portraitSvg.setAttribute('y', PORTRAIT_OFFSET);
+                
+                // Create a group to contain the portrait
+                const portraitGroup = createSVGElement('g', {
+                    id: 'portrait-group'
+                });
+                
+                // Append SVG portrait
+                portraitGroup.appendChild(portraitSvg);
+                mainSvg.appendChild(portraitGroup);
+                
+                // Find and categorize portrait elements
+                categorizePortraitElements();
+                
+                portraitLoaded = true;
+                return true;
+            } catch (error) {
+                console.error('Error loading portrait:', error);
+                createFallbackPortrait(true); // Create fallback directly in main SVG
+                return false;
+            }
+        }
+        
+        // Create a fallback portrait if loading fails
+        function createFallbackPortrait(insertDirectly = false) {
+            const simpleSvg = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+                    <rect width="512" height="512" fill="#000000" />
+                    <circle cx="256" cy="256" r="100" fill="#FE5B5C" id="red-element" />
+                    <circle cx="256" cy="256" r="50" fill="#010101" id="black-element" />
+                </svg>
+            `;
+            
+            if (insertDirectly) {
+                // Insert directly into main SVG
+                const mainSvg = document.getElementById('main-svg');
+                const portraitGroup = createSVGElement('g', {
+                    id: 'portrait-group',
+                    transform: `translate(${PORTRAIT_OFFSET}, ${PORTRAIT_OFFSET})`
+                });
+                
+                // Parse and append
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(simpleSvg, 'image/svg+xml');
+                const portraitSvg = svgDoc.documentElement;
+                
+                portraitGroup.appendChild(portraitSvg);
+                mainSvg.appendChild(portraitGroup);
+                
+                // Set up basic categorization
+                window.portraitElements = {
+                    black: [document.getElementById('black-element')],
+                    red: [document.getElementById('red-element')]
+                };
+                
+                portraitLoaded = true;
+            }
+            
+            return simpleSvg;
+        }
+        
+        // Find and categorize portrait elements by color
+        function categorizePortraitElements() {
+            // Initialize portrait elements storage
+            window.portraitElements = {
+                black: [],
+                red: []
+            };
+            
+            // Find all path, rect, circle, and polygon elements in the portrait
+            const mainSvg = document.getElementById('main-svg');
+            const portraitSvg = mainSvg.querySelector('#portrait-group svg');
+            
+            if (!portraitSvg) {
+                console.error('Portrait SVG not found');
+                return;
+            }
+            
+            const elements = portraitSvg.querySelectorAll('path, rect, circle, polygon');
+            
+            // Categorize elements by fill color
+            elements.forEach(element => {
+                const fill = element.getAttribute('fill');
+                if (!fill) return;
+                
+                if (portraitColors.black.includes(fill)) {
+                    window.portraitElements.black.push(element);
+                    // Tag element for later reference
+                    element.setAttribute('data-element-type', 'black');
+                } else if (portraitColors.red.includes(fill)) {
+                    window.portraitElements.red.push(element);
+                    // Tag element for later reference
+                    element.setAttribute('data-element-type', 'red');
+                }
+            });
+            
+            // If we didn't find elements by exact match, try with color patterns
+            if (window.portraitElements.black.length === 0 && window.portraitElements.red.length === 0) {
+                elements.forEach(element => {
+                    const fill = element.getAttribute('fill');
+                    if (!fill) return;
+                    
+                    // Check if it's a dark/black color
+                    if (fill.startsWith('#0') || fill.startsWith('#1') || 
+                        fill.startsWith('#2') || fill.startsWith('#3')) {
+                        window.portraitElements.black.push(element);
+                        element.setAttribute('data-element-type', 'black');
+                    }
+                    // Check if it's a reddish color
+                    else if (fill.startsWith('#F') || fill.startsWith('#E') || 
+                             fill.startsWith('#A') || fill.startsWith('#B') ||
+                             fill.startsWith('#C') || fill.startsWith('#D')) {
+                        window.portraitElements.red.push(element);
+                        element.setAttribute('data-element-type', 'red');
+                    }
+                });
+            }
+            
+            console.log(`Found ${window.portraitElements.black.length} black elements and ${window.portraitElements.red.length} red elements`);
+        }
+        
+        //-----------------------------------------------
+        // Frame and Border Effects
+        //-----------------------------------------------
+        
+        // Create the decorative frame around the portrait
+        function createFrame() {
+            const mainSvg = document.getElementById('main-svg');
+            const existingFrame = document.getElementById('frame-group');
+            
+            if (existingFrame) {
+                mainSvg.removeChild(existingFrame);
+            }
+            
+            // Create frame group
+            const frameGroup = createSVGElement('g', {
+                id: 'frame-group'
+            });
+            
+            // Create outer border rectangle
+            const outerBorder = createSVGElement('rect', {
+                x: FRAME_PADDING,
+                y: FRAME_PADDING,
+                width: (CANVAS_SIZE - (FRAME_PADDING * 2)).toString(),
+                height: (CANVAS_SIZE - (FRAME_PADDING * 2)).toString(),
+                fill: 'none',
+                stroke: currentPalette.light,
+                'stroke-width': '1',
+                'stroke-dasharray': '4,4',
+                opacity: '0.6'
+            });
+            
+            frameGroup.appendChild(outerBorder);
+            
+            // Create inner border rectangle
+            const innerBorder = createSVGElement('rect', {
+                x: (PORTRAIT_OFFSET - 4).toString(),
+                y: (PORTRAIT_OFFSET - 4).toString(),
+                width: (PORTRAIT_SIZE + 8).toString(),
+                height: (PORTRAIT_SIZE + 8).toString(),
+                fill: 'none',
+                stroke: currentPalette.base,
+                'stroke-width': '2',
+                opacity: '0.8'
+            });
+            
+            frameGroup.appendChild(innerBorder);
+            
+            // Create corner decorations
+            createCornerDecoration(frameGroup, FRAME_PADDING, FRAME_PADDING, 'top-left');
+            createCornerDecoration(frameGroup, CANVAS_SIZE - FRAME_PADDING, FRAME_PADDING, 'top-right');
+            createCornerDecoration(frameGroup, FRAME_PADDING, CANVAS_SIZE - FRAME_PADDING, 'bottom-left');
+            createCornerDecoration(frameGroup, CANVAS_SIZE - FRAME_PADDING, CANVAS_SIZE - FRAME_PADDING, 'bottom-right');
+            
+            mainSvg.appendChild(frameGroup);
+            
+            // Add animation to frame
+            animateFrame();
+        }
+        
+        // Create corner decoration for the frame
+        function createCornerDecoration(parent, x, y, position) {
+            // Adjustments based on corner position
+            const flipX = position.includes('right');
+            const flipY = position.includes('bottom');
+            
+            // Create corner group
+            const corner = createSVGElement('g', {
+                transform: `translate(${x}, ${y})`
+            });
+            
+            // Create corner elements
+            const cornerPath = createSVGElement('path', {
+                d: `M 0 0 ${flipX ? 'L -15' : 'L 15'} 0 ${flipY ? 'L 0 -15' : 'L 0 15'}`,
+                stroke: currentPalette.light,
+                'stroke-width': '1.5',
+                fill: 'none',
+                opacity: '0.8'
+            });
+            
+            corner.appendChild(cornerPath);
+            
+            // Add dot
+            const dot = createSVGElement('circle', {
+                cx: '0',
+                cy: '0',
+                r: '2',
+                fill: currentPalette.accent1,
+                opacity: '0.9'
+            });
+            
+            // Add pulse animation to dot
+            const pulseAnimation = createSVGElement('animate', {
+                attributeName: 'opacity',
+                values: '0.6;1;0.6',
+                dur: '3s',
+                repeatCount: 'indefinite'
+            });
+            
+            dot.appendChild(pulseAnimation);
+            corner.appendChild(dot);
+            
+            parent.appendChild(corner);
+        }
+        
+        // Add animations to the frame
+        function animateFrame() {
+            const frameGroup = document.getElementById('frame-group');
+            const borderElements = frameGroup.querySelectorAll('rect');
+            
+            // Update dasharray animation on outer border
+            const outerBorder = borderElements[0];
+            
+            // Create dasharray animation based on block time
+            const timeSinceBlock = Date.now()/1000 - blockData.time;
+            const dashAnimationDuration = Math.max(5, 20 - (timeSinceBlock / 30));
+            
+            // Remove existing animations
+            Array.from(outerBorder.children).forEach(child => {
+                if (child.tagName.toLowerCase() === 'animate') {
+                    outerBorder.removeChild(child);
+                }
+            });
+            
+            // Create new animation
+            const dashAnimation = createSVGElement('animate', {
+                attributeName: 'stroke-dashoffset',
+                from: '0',
+                to: '100',
+                dur: `${dashAnimationDuration}s`,
+                repeatCount: 'indefinite'
+            });
+            
+            outerBorder.appendChild(dashAnimation);
+            
+            // Add subtle rotation to the inner border based on transaction count
+            const innerBorder = borderElements[1];
+            
+            // Calculate rotation angle based on transaction count
+            const txInfluence = Math.min(blockData.transaction_count / 5000, 1);
+            const maxRotation = txInfluence * 2; // Maximum rotation in degrees
+            
+            // Create rotation animation
+            const rotateAnimation = createSVGElement('animateTransform', {
+                attributeName: 'transform',
+                type: 'rotate',
+                from: `0 ${CANVAS_SIZE/2} ${CANVAS_SIZE/2}`,
+                to: `${maxRotation} ${CANVAS_SIZE/2} ${CANVAS_SIZE/2}`,
+                dur: '10s',
+                repeatCount: 'indefinite',
+                additive: 'sum'
+            });
+            
+            innerBorder.appendChild(rotateAnimation);
+        }
+        
+        //-----------------------------------------------
+        // Blockchain Data Management
+        //-----------------------------------------------
+        
+        // Fetch blockchain data
+        async function fetchBlockData() {
+            try {
+                // First get current block height
+                const heightResponse = await fetch('/blockheight');
+                if (!heightResponse.ok) throw new Error('Failed to fetch block height');
+                const height = await heightResponse.text();
+
+                // Check if height has changed
+                const oldHeight = blockData.height;
+                const newHeight = parseInt(height);
+                const heightChanged = newHeight !== oldHeight;
+        
+                if (!heightChanged) {
+                    console.log(`Block height unchanged: ${oldHeight}. Skipping update.`);
+                    return false;
+                }
+        
+                 console.log(`New block detected! Height: ${oldHeight} -> ${newHeight}`);
+                
+                // Get block hash for this height
+                const hashResponse = await fetch(`/blockhash/${height}`);
+                if (!hashResponse.ok) throw new Error('Failed to fetch block hash');
+                const hash = await hashResponse.text();
+                
+                // Get block info which includes merkle root and fee percentiles
+                const blockInfoResponse = await fetch(`/r/blockinfo/${hash}`);
+                if (!blockInfoResponse.ok) throw new Error('Failed to fetch block info');
+                const blockInfo = await blockInfoResponse.json();
+
+                // Update block data with new values
+                const oldMerkleRoot = blockData.merkleRoot;
+                const newMerkleRoot = blockInfo.merkle_root || blockData.merkleRoot;
+                
+                // Update block data
+                blockData = {
+                    height: newHeight,
+                    hash: hash,
+                    merkleRoot: newMerkleRoot,
+                    time: blockInfo.timestamp || blockInfo.time || Math.floor(Date.now() / 1000),
+                    feerate_percentiles: blockInfo.feerate_percentiles || [1, 2, 5, 10, 20],
+                    transaction_count: blockInfo.transaction_count || 3450
+                };
+                
+                // Generate palette from block data
+                const oldPalette = {...currentPalette};
+                currentPalette = generatePalette(blockData.merkleRoot);
+        
+                console.log(`Base color changed: ${oldPalette.base} -> ${currentPalette.base}`);
+                
+                // Update UI with block data
+                updateCornerInfo();
+                
+                return true;
+                return blockHeightChanged;
+            } catch (error) {
+                console.error('Error fetching block data:', error);
+                return false;
+            }
+        }
+        
+        // Fetch satoshi family data
+        async function fetchSatFamilyData() {
+            try {
+                const response = await fetch(`/r/sat/${SATOSHI_NUMBER}`);
+                if (!response.ok) throw new Error('Failed to fetch sat data');
+                
+                const data = await response.json();
+                if (data && data.ids) {
+                    satFamilyData = data.ids;
+                    updateCornerInfo();
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Error fetching sat family data:', error);
+                return false;
+            }
+        }
+        
+        // Update corner info displays
+        function updateCornerInfo() {
+            // Update corner information display
+            document.getElementById('top-left').textContent = `Block: ${blockData.height}`;
+            document.getElementById('top-right').textContent = `Time: ${new Date(blockData.time * 1000).toLocaleTimeString()}`;
+            
+            const medianFee = blockData.feerate_percentiles ? 
+                blockData.feerate_percentiles[2].toFixed(1) : '5.0';
+            document.getElementById('bottom-left').textContent = `Fee: ${medianFee} sat/vB`;
+            document.getElementById('bottom-right').textContent = `Tx: ${blockData.transaction_count}`;
+            
+            // Update the info overlay
+            const infoOverlay = document.getElementById('info-overlay');
+            infoOverlay.innerHTML = `
+                <div style="font-family: monospace;">
+                    <div>Abstract CryptoText Patterns</div>
+                    <div>Block: ${blockData.height}</div>
+                    <div>Hash: ...${blockData.hash.substring(blockData.hash.length - 8)}</div>
+                    <div>Satoshi: ${SATOSHI_NUMBER}</div>
+                    <div>Family: ${satFamilyData ? satFamilyData.length : 'Unknown'} members</div>
+                </div>
+            `;
+        }
+        
+        // Toggle info overlay visibility on click
+        function setupInfoOverlayToggle() {
+            const container = document.getElementById('canvas-container');
+            const infoOverlay = document.getElementById('info-overlay');
+            
+            // Make info overlay respond to pointer events
+            infoOverlay.style.pointerEvents = 'auto';
+            
+            // Add click handler to container
+            container.addEventListener('click', function(e) {
+                // Check if we're clicking on the overlay itself
+                if (e.target.closest('#info-overlay')) {
+                    return; // Don't toggle if clicking on the overlay
+                }
+                
+                // Toggle overlay visibility
+                if (infoOverlay.style.opacity === '0' || infoOverlay.style.opacity === '') {
+                    infoOverlay.style.opacity = '1';
+                } else {
+                    infoOverlay.style.opacity = '0';
+                }
+            });
+            
+            // Add click handler to overlay to prevent propagation
+            infoOverlay.addEventListener('click', function(e) {
+                e.stopPropagation(); // Prevent container click from triggering
+            });
+        }
+
+
+        // 1. Modify resetPatternSystem to handle nested patterns
+function resetPatternSystem() {
+    console.log("Resetting pattern system for block height", blockData.height);
+    
+    // Clear existing patterns first
+    const oldPatterns = patternSystem.patterns.length;
+    patternSystem.patterns = [];
+    console.log(`Cleared ${oldPatterns} patterns from memory`);
+    
+    // Clear pattern definitions from SVG - With better handling of nested patterns
+    const patternDefs = document.getElementById('pattern-defs');
+    
+    // First, find all patterns created by our system
+    const patternIds = new Set();
+    document.querySelectorAll('[id^="pattern-"]').forEach(el => {
+        patternIds.add(el.id);
+    });
+    
+    console.log(`Found ${patternIds.size} pattern elements with our pattern ID prefix`);
+    
+    // Find all pattern elements, including nested ones
+    const allPatterns = Array.from(document.querySelectorAll('pattern'));
+    console.log(`Found ${allPatterns.length} total pattern elements in SVG`);
+    
+    let removedCount = 0;
+    
+    // Remove only patterns created by our system
+    allPatterns.forEach(pattern => {
+        try {
+            if (patternIds.has(pattern.id)) {
+                console.log(`Removing pattern: ${pattern.id}`);
+                if (pattern.parentNode) {
+                    pattern.parentNode.removeChild(pattern);
+                    removedCount++;
+                }
+            } else if (pattern.id === 'backgroundPattern') {
+                // Just ignore this one, it's from the abstract pattern resource
+                console.log(`Ignoring resource pattern: ${pattern.id}`);
+            }
+        } catch (error) {
+            console.error(`Error removing pattern ${pattern.id}:`, error);
+        }
+    });
+    
+    console.log(`Removed ${removedCount}/${patternIds.size} pattern elements`);
+    
+    // Reset portrait elements to base colors
+    if (window.portraitElements) {
+        ['black', 'red'].forEach(elementType => {
+            const elements = window.portraitElements[elementType];
+            if (!elements) return;
+            
+            elements.forEach(element => {
+                // Reset fill to solid color
+                element.setAttribute('fill', elementType === 'black' ? 
+                    currentPalette.dark : currentPalette.base);
+                
+                // Remove any animations - safely
+                const animations = Array.from(element.querySelectorAll('animate, animateTransform'));
+                animations.forEach(anim => {
+                    if (anim.parentNode === element) {
+                        element.removeChild(anim);
+                    }
+                });
+            });
+        });
+    }
+    
+    // Remove cloned elements that might have been created for patterns
+    if (window.portraitElements) {
+        ['black', 'red'].forEach(elementType => {
+            const elements = window.portraitElements[elementType];
+            if (!elements || elements.length === 0) return;
+            
+            // Get parent group that contains these elements
+            const parentGroup = elements[0].parentNode;
+            if (!parentGroup) return;
+            
+            // Find all elements with pattern fills that aren't in our original set
+            const originalIds = new Set(elements.map(el => el.id));
+            const allChildren = Array.from(parentGroup.children);
+            
+            // Collect elements to remove
+            const toRemove = [];
+            allChildren.forEach(child => {
+                // If it's not in our original elements and has a pattern fill
+                if (!originalIds.has(child.id) && 
+                    child.hasAttribute('fill') && 
+                    child.getAttribute('fill').startsWith('url(#')) {
+                    toRemove.push(child);
+                }
+            });
+            
+            // Remove them
+            toRemove.forEach(el => parentGroup.removeChild(el));
+            console.log(`Removed ${toRemove.length} cloned pattern elements`);
+        });
+    }
+    
+    // Initialize new patterns with updated blockchain data
+    initPatternSystem();
+}
+        
+        //-----------------------------------------------
+        // Main Animation Loop
+        //-----------------------------------------------
+        
+        // Main animation function
+        function animate(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const delta = timestamp - lastTime;
+            
+            // Skip frames for performance if needed
+            if (window.ANIMATION_THROTTLE && window.FRAME_COUNT !== undefined) {
+                window.FRAME_COUNT = (window.FRAME_COUNT + 1) % window.ANIMATION_THROTTLE;
+                if (window.FRAME_COUNT !== 0) {
+                    animationFrame = requestAnimationFrame(animate);
+                    return;
+                }
+            }
+            
+            // Performance optimization - frame limiting
+            if (delta < 33) { // ~30fps
+                animationFrame = requestAnimationFrame(animate);
+                return;
+            }
+            
+            // Update animations if needed
+            // For example, we could update pattern animations here
+            // or add special effects based on block time
+            
+            // Add special effects for new blocks
+            const timeSinceBlock = (Date.now() / 1000) - blockData.time;
+            if (timeSinceBlock < 30) { // New block effect
+                // Could add pulsing, color changes, etc.
+                addNewBlockEffects(timeSinceBlock);
+            }
+            
+            lastTime = timestamp;
+            animationFrame = requestAnimationFrame(animate);
+        }
+        
+        // Add visual effects for new blocks
+        function addNewBlockEffects(timeSinceBlock) {
+            // Calculate intensity (fade out over time)
+            const intensity = Math.max(0, 1 - (timeSinceBlock / 30));
+            
+            // Add effects to portrait elements
+            if (window.portraitElements) {
+                // Pulse portrait elements
+                ['black', 'red'].forEach(elementType => {
+                    const elements = window.portraitElements[elementType];
+                    if (!elements) return;
+                    
+                    elements.forEach(element => {
+                        // Remove existing animations
+                        const existingAnims = element.querySelectorAll('animate');
+                        existingAnims.forEach(anim => element.removeChild(anim));
+                        
+                        // Add pulse animation
+                        const pulseAnim = createSVGElement('animate', {
+                            attributeName: 'opacity',
+                            values: `${0.7};${1.0};${0.7}`,
+                            dur: `${2 + Math.random() * 2}s`,
+                            repeatCount: '3'
+                        });
+                        
+                        element.appendChild(pulseAnim);
+                    });
+                });
+            }
+            
+            // Add effect to frame
+            const frameGroup = document.getElementById('frame-group');
+            if (frameGroup) {
+                // Enhance frame glow temporarily
+                const innerBorder = frameGroup.querySelector('rect:nth-child(2)');
+                if (innerBorder) {
+                    innerBorder.setAttribute('stroke-width', (2 + (intensity * 2)).toString());
+                    innerBorder.setAttribute('opacity', (0.8 + (intensity * 0.2)).toString());
+                }
+            }
+        }
+        
+        //-----------------------------------------------
+        // Initialization
+        //-----------------------------------------------
+        
+        // Initialize the application
+        async function init() {
+            try {
+                console.log("Initializing Abstract CryptoText Patterns...");
+                
+                // First try to fetch blockchain data
+                console.log("Fetching blockchain data...");
+                const blockDataSuccess = await fetchBlockData();
+                if (!blockDataSuccess) {
+                    console.warn("Using fallback blockchain data");
+                    
+                    // Generate mock data based on current time
+                    const mockTime = Math.floor(Date.now() / 1000);
+                    blockData = {
+                        height: 840000,
+                        hash: '000000000000000000032028f3032748cef8227873ff4872689bf23f1cda83b5',
+                        merkleRoot: '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b',
+                        time: mockTime,
+                        feerate_percentiles: [1, 2, 5, 10, 20],
+                        transaction_count: 3450
+                    };
+                    
+                    // Generate color palette
+                    currentPalette = generatePalette(blockData.merkleRoot);
+                }
+                
+                // Load resources (abstract patterns and CryptoText font)
+                console.log("Loading resources...");
+                await Promise.all([
+                    loadAbstractPatterns(),
+                    loadCryptoTextFont()
+                ]);
+                
+                // Add resources to SVG
+                addResourcesToSVG();
+                
+                // Then load portrait
+                console.log("Loading portrait...");
+                const portraitSuccess = await loadPortrait();
+                if (!portraitSuccess) {
+                    console.warn("Using fallback portrait");
+                }
+                
+                // Initialize pattern system with resources
+                console.log("Initializing pattern system...");
+                initPatternSystem();
+                
+                // Apply patterns to portrait elements
+                console.log("Applying patterns...");
+                applyPatterns();
+                
+                // Create frame
+                console.log("Creating frame...");
+                createFrame();
+                
+                // Update corner info
+                console.log("Updating information display...");
+                updateCornerInfo();
+                
+                // Setup info overlay toggle
+                setupInfoOverlayToggle();
+                
+                // Fetch satoshi family data (not critical)
+                console.log("Fetching family data...");
+                fetchSatFamilyData();
+                
+                // Set up animation
+                console.log("Starting animation loop...");
+                window.ANIMATION_THROTTLE = 1;
+                window.FRAME_COUNT = 0;
+                
+                // Set up window focus/blur events
+                window.addEventListener('blur', () => {
+                    console.log("Window blurred, reducing animation rate");
+                    window.ANIMATION_THROTTLE = 4; // Only update every 4 frames
+                });
+                
+                window.addEventListener('focus', () => {
+                    console.log("Window focused, resuming normal animation rate");
+                    window.ANIMATION_THROTTLE = 1; // Update every frame
+                });
+                
+                // Start animation loop
+                animate(0);
+                
+                // Set up periodic data fetching (every minute)
+                setInterval(async () => {
+                    const updated = await fetchBlockData();
+                    if (updated) {
+                        console.log("Block data updated, reinitializing patterns");
+                        // Reset and reinitialize patterns
+                        resetPatternSystem();
+                                            
+                        applyPatterns();
+                        createFrame();
+
+                        // Explicitly trigger new block effects
+                        addNewBlockEffects(0); // Start with full intensity
+                    }
+                }, 60000);
+                
+                console.log("Initialization complete");
+            } catch (error) {
+                console.error("Initialization failed:", error);
+                
+                const mainSvg = document.getElementById('main-svg');
+                mainSvg.innerHTML = `
+                    <text x="288" y="288" text-anchor="middle" fill="white" font-family="monospace">
+                        Error initializing artwork: ${error.message || "Unknown error"}
+                    </text>
+                `;
+            }
+        }
+
+        // Add this debug function
+window.debugPatterns = function() {
+    console.log("=== PATTERN DEBUG INFO ===");
+    
+    // Count patterns in memory
+    console.log(`Patterns in memory: ${patternSystem.patterns.length}`);
+    patternSystem.patterns.forEach(p => {
+        console.log(` - ${p.id} (${p.level}, ${p.type}, ${p.target})`);
+    });
+    
+    // Count patterns in DOM
+    const allPatterns = document.querySelectorAll('pattern');
+    console.log(`Patterns in DOM: ${allPatterns.length}`);
+    allPatterns.forEach(p => {
+        console.log(` - ${p.id} (parent: ${p.parentNode.nodeName})`);
+    });
+    
+    // Count portrait elements with patterns
+    if (window.portraitElements) {
+        ['black', 'red'].forEach(elementType => {
+            const elements = window.portraitElements[elementType];
+            if (!elements) return;
+            
+            const patterned = elements.filter(el => 
+                el.hasAttribute('fill') && 
+                el.getAttribute('fill').startsWith('url(#')
+            );
+            
+            console.log(`${elementType} elements with patterns: ${patterned.length}/${elements.length}`);
+        });
+    }
+    
+    return "Pattern debug info printed to console";
+};
+
+console.log("Added debug function - type 'window.debugPatterns()' in console to see pattern details");
+        
+        // Start the application
+        init();
+      </script>
+</body>
+</html>           
