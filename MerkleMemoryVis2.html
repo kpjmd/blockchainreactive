@@ -1,0 +1,2698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Merkle Memory Visualization</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    #canvas-container {
+      position: relative;
+      width: 100vmin;  /* Use viewport min units for perfect square */
+      height: 100vmin;
+      max-width: 576px;
+      max-height: 576px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    #portrait-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    #info-overlay {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: rgba(255, 255, 255, 0.9);
+      font-family: monospace;
+      font-size: 12px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: auto;
+      user-select: none;
+      max-width: 80%;
+      overflow: hidden;
+    }
+    
+    .loading-indicator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-family: monospace;
+      font-size: 16px;
+      text-align: center;
+      opacity: 1;
+      transition: opacity 0.5s ease;
+    }
+    
+    .loading-indicator.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .memory-text {
+      font-family: monospace;
+      font-size: 16px;
+      fill: white;
+      text-anchor: middle;
+    }
+    
+    .height-text {
+      font-family: monospace;
+      font-size: 10px;
+      fill: rgba(255, 255, 255, 0.7);
+      text-anchor: middle;
+    }
+    
+    @media (max-width: 576px) {
+      #info-overlay {
+        font-size: 10px;
+        padding: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container">
+    <svg id="portrait-svg" viewBox="0 0 576 576" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="info-overlay"></div>
+  </div>
+  
+  <!-- Load GSAP from inscription -->
+  <script src="/content/6577ec768235a2a911e91a115b964618581bde91d99bc58f5c7390fdfb155ae6i0"></script>
+  
+  <!-- Main visualization script -->
+  <script>
+    /**
+ * Main application class for Merkle Memory visualization
+ */
+class MerkleMemoryApp {
+  /**
+   * Create a new MerkleMemoryApp
+   */
+  constructor() {
+    // Initialize layout and UI
+    this.layout = new ResponsiveLayout('#canvas-container', '#portrait-svg');
+    
+    // Create core components
+    this.errorHandler = new ErrorHandler(this);
+    this.animationController = new AnimationController();
+    this.dataManager = new BlockchainDataManager(this);
+    this.visualization = new MerkleMemoryVisualization(this);
+    
+    // Set up event listeners
+    this.setupEventListeners();
+    
+    // Initialize the application
+    this.init();
+  }
+  
+  /**
+   * Set up event listeners
+   */
+  setupEventListeners() {
+    // Listen for data updates from the data manager
+    this.dataManager.registerUpdateCallback((blockData) => {
+      this.handleBlockDataUpdate(blockData);
+    });
+    
+    // Listen for visualization ready event
+    this.visualization.on('ready', () => {
+      this.handleVisualizationReady();
+    });
+    
+    // Listen for animation complete event
+    this.visualization.on('animationComplete', (blockData) => {
+      this.handleAnimationComplete(blockData);
+    });
+    
+    // Listen for errors
+    this.visualization.on('error', (error) => {
+      this.errorHandler.handleError(error, 'Visualization', false);
+    });
+  }
+  
+  /**
+   * Initialize the application
+   */
+  async init() {
+    try {
+      console.log('Initializing Merkle Memory application');
+      
+      // Initialize animation controller first
+      this.animationController.initialize();
+      
+      // Load visualization resources
+      const visualizationReady = this.visualization.loadResources();
+      
+      // Initialize data manager
+      const dataManagerReady = this.dataManager.initialize();
+      
+      // Wait for both to be ready
+      await Promise.all([visualizationReady, dataManagerReady]);
+      
+      // Initialize integration between components
+      this.visualization.initializeWithAnimationController();
+      
+      // Start periodic updates
+      this.dataManager.startPeriodicUpdates();
+      
+      console.log('Merkle Memory application initialized');
+      
+    } catch (error) {
+      console.error('Error initializing application:', error);
+      this.errorHandler.handleError(error, 'Initialization', true);
+    }
+  }
+  
+  /**
+   * Handle block data updates
+   * @param {Object} blockData - Updated block data
+   */
+  handleBlockDataUpdate(blockData) {
+    console.log(`Block data updated: ${blockData.height}`);
+    
+    // Update visualization
+    this.visualization.render(blockData);
+  }
+  
+  /**
+   * Handle visualization ready event
+   */
+  handleVisualizationReady() {
+    console.log('Visualization ready');
+    
+    // Get current block from data manager and render it
+    const currentBlock = this.dataManager.getCurrentBlock();
+    if (currentBlock) {
+      this.visualization.render(currentBlock);
+    }
+  }
+  
+  /**
+   * Handle animation complete event
+   * @param {Object} blockData - Block data that was animated
+   */
+  handleAnimationComplete(blockData) {
+    console.log(`Animation complete for block ${blockData.height}`);
+    
+    // Notify animation controller
+    this.animationController.notifyAnimationComplete();
+  }
+  
+  /**
+   * Stop the application and clean up resources
+   */
+  stop() {
+    console.log('Stopping Merkle Memory application');
+    
+    // Stop data updates
+    this.dataManager.stopPeriodicUpdates();
+    
+    // Dispose visualization
+    this.visualization.dispose();
+    
+    // Shutdown animation controller
+    this.animationController.shutdown();
+    
+    console.log('Merkle Memory application stopped');
+  }
+}
+    
+    /**
+ * Manages blockchain data fetching, processing, and storage
+ */
+class BlockchainDataManager {
+  /**
+   * Creates a new BlockchainDataManager
+   * @param {Object} app - The main application instance
+   */
+  constructor(app) {
+    this.app = app;
+    
+    // Data storage
+    this.blockMemory = [];
+    this.currentBlock = null;
+    this.maxMemoryBlocks = 5;
+    
+    // State tracking
+    this.isInitialized = false;
+    this.isUpdating = false;
+    this.lastUpdateTime = 0;
+    this.updateInterval = null;
+    this.updateFrequency = 60000; // 1 minute between updates
+    
+    // Event callbacks
+    this.onDataUpdate = null;
+    this.onError = null;
+  }
+  
+  /**
+   * Initialize the data manager and load initial data
+   * @returns {Promise<boolean>} True if initialization was successful
+   */
+  async initialize() {
+    try {
+      console.log('Initializing BlockchainDataManager');
+      
+      // Load initial historical blocks
+      await this.loadHistoricalBlocks();
+      
+      // Mark as initialized
+      this.isInitialized = true;
+      console.log('BlockchainDataManager initialized successfully');
+      
+      return true;
+    } catch (error) {
+      console.error('Error initializing BlockchainDataManager:', error);
+      
+      // Call error handler if available
+      if (this.app.errorHandler) {
+        this.app.errorHandler.handleError(error, 'BlockchainDataManager', false);
+      }
+      
+      // Use mock data as fallback
+      this.useMockData();
+      
+      return false;
+    }
+  }
+  
+  /**
+   * Start periodic updates of blockchain data
+   * @param {number} interval - Milliseconds between updates
+   */
+  startPeriodicUpdates(interval = this.updateFrequency) {
+    // Clear any existing interval
+    this.stopPeriodicUpdates();
+    
+    // Set new interval
+    this.updateFrequency = interval;
+    this.updateInterval = setInterval(async () => {
+      try {
+        // Check if it's time for an update
+        const now = Date.now();
+        if (now - this.lastUpdateTime < this.updateFrequency * 0.9) {
+          return; // Too soon since last update
+        }
+        
+        // Fetch and process new data
+        const blockData = await this.fetchBlockchainData();
+        await this.processNewBlockData(blockData);
+      } catch (error) {
+        console.error('Error in periodic update:', error);
+        
+        // Call error handler if available
+        if (this.app.errorHandler) {
+          this.app.errorHandler.handleError(error, 'Periodic Update', false);
+        }
+      }
+    }, Math.min(interval, 10000)); // Check at most every 10 seconds
+    
+    console.log(`Started periodic updates every ${interval/1000} seconds`);
+  }
+  
+  /**
+   * Stop periodic updates
+   */
+  stopPeriodicUpdates() {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+      console.log('Stopped periodic updates');
+    }
+  }
+  
+  /**
+   * Fetch current blockchain data
+   * @returns {Promise<Object>} Block data
+   */
+  async fetchBlockchainData() {
+    try {
+      // Track update time
+      this.lastUpdateTime = Date.now();
+      this.isUpdating = true;
+      
+      // Fetch basic block data with text responses
+      const [height, hash, time] = await Promise.all([
+        fetch('/blockheight').then(r => r.text()),
+        fetch('/blockhash').then(r => r.text()),
+        fetch('/blocktime').then(r => r.text())
+      ]);
+      
+      // Validate basic data
+      if (!height || !hash || !time) {
+        throw new Error('Incomplete basic block data');
+      }
+      
+      // Fetch detailed block info (uses JSON response)
+      const response = await fetch(`/r/blockinfo/${hash}`);
+      if (!response.ok) {
+        throw new Error(`Error fetching block info: ${response.status}`);
+      }
+      
+      const blockInfo = await response.json();
+      
+      // Compose complete block data
+      const blockData = {
+        height: parseInt(height),
+        hash,
+        merkle_root: blockInfo.merkle_root || "",
+        time: parseInt(time),
+        transaction_count: blockInfo.transaction_count || 3000,
+        median_fee_rate: (blockInfo.feerate_percentiles || [1,2,5,7,10])[2],
+        // Add optional fields for enhanced visualization
+        total_size: blockInfo.total_size || 0,
+        total_fee: blockInfo.total_fee || 0,
+        timestamp: Date.now() // Local timestamp for reference
+      };
+      
+      console.log(`Fetched data for block ${blockData.height}`);
+      
+      return blockData;
+    } catch (error) {
+      console.error('Error fetching blockchain data:', error);
+      
+      // Call error handler
+      if (this.app.errorHandler) {
+        this.app.errorHandler.handleError(error, 'Data Fetch', false);
+      }
+      
+      // Return mock data as fallback
+      return this.createMockBlockData();
+    } finally {
+      this.isUpdating = false;
+    }
+  }
+  
+  /**
+   * Load historical blocks for memory sequence
+   * @returns {Promise<void>}
+   */
+  async loadHistoricalBlocks() {
+    try {
+      console.log('Loading historical blocks');
+      
+      // First, get current block height
+      const heightResponse = await fetch('/blockheight');
+      const currentHeight = await heightResponse.text();
+      
+      if (!currentHeight || isNaN(currentHeight)) {
+        console.warn('Could not get current block height, using mock data');
+        this.useMockData();
+        return;
+      }
+      
+      // Convert to number and calculate previous blocks
+      const height = parseInt(currentHeight);
+      const blockHeightsToFetch = [height]; // Start with current
+      
+      // Add previous block heights (typically 4 previous blocks for 5 total)
+      for (let i = 1; i <= 4; i++) {
+        blockHeightsToFetch.push(height - i);
+      }
+      
+      console.log(`Fetching data for blocks: ${blockHeightsToFetch.join(', ')}`);
+      
+      // Fetch each block's data
+      const blockDataPromises = blockHeightsToFetch.map(async (blockHeight) => {
+        try {
+          // Use the recursive blockinfo endpoint
+          const response = await fetch(`/r/blockinfo/${blockHeight}`);
+          if (!response.ok) {
+            throw new Error(`Error fetching block ${blockHeight}: ${response.status}`);
+          }
+          
+          const blockInfo = await response.json();
+          
+          // Format the data in our standard structure
+          return {
+            height: blockHeight,
+            hash: blockInfo.hash || "",
+            merkle_root: blockInfo.merkle_root || "",
+            time: blockInfo.timestamp || Math.floor(Date.now() / 1000 - (height - blockHeight) * 600), // Estimate if missing
+            transaction_count: blockInfo.transaction_count || 3000,
+            median_fee_rate: (blockInfo.feerate_percentiles || [1,2,5,7,10])[2],
+            total_size: blockInfo.total_size || 0,
+            total_fee: blockInfo.total_fee || 0,
+            timestamp: Date.now() // Local timestamp for reference
+          };
+        } catch (error) {
+          console.error(`Error fetching data for block ${blockHeight}:`, error);
+          return null;
+        }
+      });
+      
+      // Process results in order
+      const blockDataResults = await Promise.all(blockDataPromises);
+      
+      // Filter out any null results and sort by height (highest/newest first)
+      const validBlockData = blockDataResults
+        .filter(block => block !== null)
+        .sort((a, b) => b.height - a.height);
+      
+      if (validBlockData.length === 0) {
+        console.warn('No valid block data retrieved, using mock data');
+        this.useMockData();
+        return;
+      }
+      
+      console.log(`Retrieved data for ${validBlockData.length} blocks`);
+      
+      // Store blocks in memory and set current block
+      this.blockMemory = validBlockData;
+      this.currentBlock = validBlockData[0];
+      
+      // Trigger update event
+      this.triggerDataUpdate(this.currentBlock);
+      
+    } catch (error) {
+      console.error('Error loading historical blocks:', error);
+      
+      // Call error handler
+      if (this.app.errorHandler) {
+        this.app.errorHandler.handleError(error, 'Historical Data', false);
+      }
+      
+      // Use mock data as fallback
+      this.useMockData();
+    }
+  }
+  
+  /**
+   * Process new block data and update memory
+   * @param {Object} blockData - The new block data
+   * @returns {Promise<void>}
+   */
+  async processNewBlockData(blockData) {
+    if (!blockData) return;
+    
+    console.log(`Processing new block data for height ${blockData.height}`);
+    
+    // Check if this is a new block or if we already have it
+    const existingIndex = this.blockMemory.findIndex(b => b.height === blockData.height);
+    
+    if (existingIndex === -1) {
+      // New block - add to memory at the beginning (newest first)
+      this.blockMemory.unshift(blockData);
+      console.log(`Added new block ${blockData.height} to memory`);
+      
+      // Keep only the max number of blocks
+      if (this.blockMemory.length > this.maxMemoryBlocks) {
+        this.blockMemory.pop();
+      }
+      
+      // Update current block
+      this.currentBlock = blockData;
+      
+    } else if (existingIndex === 0) {
+      // Current block update - replace data
+      this.blockMemory[0] = blockData;
+      this.currentBlock = blockData;
+      console.log(`Updated current block ${blockData.height} data`);
+      
+    } else {
+      // Existing block in history - replace data but don't move position
+      this.blockMemory[existingIndex] = blockData;
+      console.log(`Updated historical block ${blockData.height} data`);
+    }
+    
+    // Trigger update event
+    this.triggerDataUpdate(blockData);
+  }
+  
+  /**
+   * Create mock block data for testing
+   * @returns {Object} Mock block data
+   */
+  createMockBlockData() {
+    const mockHeight = 840000;
+    return {
+      height: mockHeight,
+      hash: "000000000000000000032028f3032748cef8227873ff4872689bf23f1cda83b5",
+      merkle_root: "031b417c3a1828ddf3d6527fc210daafcc9218e81f98257f88d4d43bd7a5894f",
+      time: Math.floor(Date.now() / 1000),
+      transaction_count: 3500,
+      median_fee_rate: 5,
+      total_size: 1500000,
+      total_fee: 0.05,
+      timestamp: Date.now(),
+      isMock: true
+    };
+  }
+  
+  /**
+   * Use mock data when real data is unavailable
+   */
+  useMockData() {
+    console.warn('Using mock blockchain data');
+    
+    // Create current block
+    const currentBlock = this.createMockBlockData();
+    
+    // Create historical blocks (4 additional blocks)
+    const mockMemory = [currentBlock];
+    
+    for (let i = 1; i <= 4; i++) {
+      const mockBlock = this.createMockBlockData();
+      mockBlock.height = currentBlock.height - i;
+      mockBlock.time = currentBlock.time - (i * 600); // Approximately 10 minutes per block
+      mockBlock.transaction_count = Math.max(2000, currentBlock.transaction_count - (i * 250));
+      mockMemory.push(mockBlock);
+    }
+    
+    // Set mock data
+    this.blockMemory = mockMemory;
+    this.currentBlock = currentBlock;
+    
+    // Trigger update event
+    this.triggerDataUpdate(currentBlock);
+  }
+  
+  /**
+   * Trigger the data update event
+   * @param {Object} blockData - The updated block data
+   */
+  triggerDataUpdate(blockData) {
+    if (typeof this.onDataUpdate === 'function') {
+      this.onDataUpdate(blockData);
+    }
+  }
+  
+  /**
+   * Get the current block data
+   * @returns {Object|null} Current block data
+   */
+  getCurrentBlock() {
+    return this.currentBlock;
+  }
+  
+  /**
+   * Get all blocks in memory
+   * @returns {Array<Object>} All blocks in memory
+   */
+  getAllBlocks() {
+    return [...this.blockMemory];
+  }
+  
+  /**
+   * Get a specific block by height
+   * @param {number} height - Block height
+   * @returns {Object|null} Block data or null if not found
+   */
+  getBlockByHeight(height) {
+    return this.blockMemory.find(block => block.height === height) || null;
+  }
+  
+  /**
+   * Check if the data manager is currently updating
+   * @returns {boolean} True if updating
+   */
+  isCurrentlyUpdating() {
+    return this.isUpdating;
+  }
+  
+  /**
+   * Register a callback for when data is updated
+   * @param {Function} callback - Function to call when data is updated
+   */
+  registerUpdateCallback(callback) {
+    this.onDataUpdate = callback;
+  }
+  
+  /**
+   * Register a callback for when an error occurs
+   * @param {Function} callback - Function to call when an error occurs
+   */
+  registerErrorCallback(callback) {
+    this.onError = callback;
+  }
+}
+
+    
+    /**
+ * Manages the visual representation of blockchain data
+ */
+class MerkleMemoryVisualization {
+  /**
+   * Creates a new MerkleMemoryVisualization
+   * @param {Object} app - The main application instance
+   */
+  constructor(app) {
+    this.app = app;
+    
+    // DOM elements
+    this.svgContainer = document.getElementById('portrait-svg');
+    this.infoOverlay = document.getElementById('info-overlay');
+    this.loadingIndicator = document.querySelector('.loading-indicator');
+    
+    // SVG paths and groups
+    this.paths = [];
+    this.colorGroups = new Map();
+    
+    // Resources
+    this.portraitDataUrl = '869585a3af3c74eec7549421cdb62cb172cbf9e5194f14a207e60c8dd683f1bei0';
+    this.cryptoTextFontId = '64ccc6c0865e48fe0f102f2da979c473d0d63acf1d8474d82d7aaf57a0528146i0';
+    this.cryptoTextFont = null;
+    
+    // Animation
+    this.mainTimeline = gsap.timeline({ paused: true });
+    this.memoryTimeline = null; // Track memory sequence timeline
+    this.animationState = {
+      isAnimating: false,
+      currentBlock: null,
+      effectsEnabled: true,
+      sequenceInProgress: false // Track whether a full sequence is in progress
+    };
+    
+    // Event system
+    this.eventListeners = {
+      'ready': [],
+      'animationComplete': [],
+      'error': []
+    };
+    
+    // State tracking
+    this.isInitialized = false;
+    this.loadingStates = {
+      portraitLoaded: false,
+      fontLoaded: false
+    };
+
+    // Hide info overlay initially
+    if (this.infoOverlay) {
+      this.infoOverlay.style.opacity = '0';
+    }
+    
+    // Set up event handlers
+    this.setupEventHandlers();
+  }
+  
+  /**
+   * Set up event handlers for the visualization
+   */
+  setupEventHandlers() {
+    // Set up info overlay toggle
+    if (this.infoOverlay) {
+      // Initially hide overlay
+      this.infoOverlay.style.opacity = '0';
+      this.infoOverlay.style.pointerEvents = 'auto'; // Make clickable
+      
+      // Add click event to toggle
+      this.infoOverlay.addEventListener('click', () => {
+        const currentOpacity = parseFloat(getComputedStyle(this.infoOverlay).opacity);
+        gsap.to(this.infoOverlay, {
+          opacity: currentOpacity > 0.5 ? 0 : 0.9,
+          duration: 0.3,
+          ease: "power1.inOut"
+        });
+      });
+      
+      // Add click handler to canvas container to show overlay
+      document.getElementById('canvas-container').addEventListener('click', (e) => {
+        // Ignore clicks on the overlay itself
+        if (e.target !== this.infoOverlay && !this.infoOverlay.contains(e.target)) {
+          const currentOpacity = parseFloat(getComputedStyle(this.infoOverlay).opacity);
+          if (currentOpacity < 0.5) {
+            // Show overlay and update with current block data
+            const currentBlock = this.animationState.currentBlock || 
+                                (this.app.dataManager ? this.app.dataManager.getCurrentBlock() : null);
+      
+            if (currentBlock) {
+              this.updateInfoDisplay(currentBlock, true);
+            }
+      
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+              gsap.to(this.infoOverlay, {
+                opacity: 0,
+                duration: 0.3,
+                ease: "power1.inOut"
+              });
+            }, 3000);
+          }
+        }
+      });
+    }
+  }
+  
+  /**
+   * Load all required resources
+   * @returns {Promise<boolean>} True if resources loaded successfully
+   */
+  async loadResources() {
+    try {
+      console.log('Loading visualization resources');
+      
+      // Start both loading processes in parallel
+      const loadPromises = [
+        this.loadPortraitSvg(),
+        this.loadCryptoTextFont()
+      ];
+      
+      // Wait for all resources to load
+      await Promise.all(loadPromises);
+      
+      // Process paths and set up visualization
+      this.processPaths();
+      
+      // Set initialized flag
+      this.isInitialized = true;
+      console.log('Visualization resources loaded successfully');
+      
+      // Hide loading indicator
+      this.hideLoadingIndicator();
+      
+      // Trigger ready event
+      this.triggerEvent('ready');
+      
+      return true;
+    } catch (error) {
+      console.error('Error loading visualization resources:', error);
+      
+      // Call error handler
+      if (this.app && this.app.errorHandler) {
+        this.app.errorHandler.handleError(error, 'Resource Loading', true);
+      }
+      
+      // Trigger error event
+      this.triggerEvent('error', error);
+      
+      return false;
+    }
+  }
+  
+  /**
+   * Hide the loading indicator
+   */
+  hideLoadingIndicator() {
+    if (this.loadingIndicator) {
+      this.loadingIndicator.classList.add('hidden');
+    }
+  }
+  
+  /**
+ * Load the portrait SVG
+ * @returns {Promise<void>}
+ */
+async loadPortraitSvg() {
+  try {
+    const response = await fetch(`/content/${this.portraitDataUrl}`);
+    if (!response.ok) {
+      throw new Error(`Failed to load portrait SVG: ${response.status}`);
+    }
+    
+    const svgText = await response.text();
+    
+    // Extract viewBox if present
+    const viewBoxMatch = svgText.match(/viewBox="([^"]+)"/);
+    const originalViewBox = viewBoxMatch ? viewBoxMatch[1] : null;
+    
+    // Insert SVG content
+    this.svgContainer.innerHTML = this.extractSvgContent(svgText);
+    
+    // Get all paths
+    this.paths = Array.from(this.svgContainer.querySelectorAll('path'));
+    
+    // Handle viewBox adjustment if necessary
+    if (originalViewBox && originalViewBox !== '0 0 576 576') {
+      console.log(`Original SVG viewBox: ${originalViewBox}`);
+      
+      // Extract dimensions
+      const [, , originalWidth, originalHeight] = originalViewBox.split(' ').map(Number);
+      
+      // Update responsive layout with correct viewBox
+      if (this.app && this.app.layout && originalWidth && originalHeight) {
+        // We want to keep the content at 576x576, but adjust for original aspect ratio
+        if (originalWidth === originalHeight) {
+          // If it's already square, just use our standard size
+          this.app.layout.updateViewBox('0 0 576 576');
+        } else {
+          // Adjust viewBox to maintain aspect ratio
+          const aspectRatio = originalWidth / originalHeight;
+          if (aspectRatio > 1) {
+            // Wider than tall
+            const adjustedHeight = 576 / aspectRatio;
+            this.app.layout.updateViewBox(`0 0 576 ${adjustedHeight}`);
+          } else {
+            // Taller than wide
+            const adjustedWidth = 576 * aspectRatio;
+            this.app.layout.updateViewBox(`0 0 ${adjustedWidth} 576`);
+          }
+        }
+      }
+    }
+    
+    // Set loading state
+    this.loadingStates.portraitLoaded = true;
+    console.log(`Loaded ${this.paths.length} paths from portrait SVG`);
+  } catch (error) {
+    console.error('Error loading portrait SVG:', error);
+    this.loadingStates.portraitLoaded = false;
+    throw error;
+  }
+}
+  
+  /**
+   * Extract just the path elements from SVG content
+   * @param {string} svgText - The raw SVG text
+   * @returns {string} The cleaned SVG content with just paths
+   */
+  extractSvgContent(svgText) {
+    // Create a temporary DOM parser
+    const parser = new DOMParser();
+    const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+    
+    // Extract all path elements
+    const paths = svgDoc.querySelectorAll('path');
+    
+    // Create new SVG content with just the paths
+    let content = '';
+    paths.forEach(path => {
+      content += path.outerHTML;
+    });
+    
+    return content;
+  }
+  
+  /**
+   * Load the CryptoText font
+   * @returns {Promise<void>}
+   */
+  async loadCryptoTextFont() {
+    try {
+      const response = await fetch(`/content/${this.cryptoTextFontId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load CryptoText font: ${response.status}`);
+      }
+      
+      const fontSvg = await response.text();
+      
+      // Parse SVG to extract character paths
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(fontSvg, 'image/svg+xml');
+      
+      // Create character map
+      this.cryptoTextFont = {
+        characters: {},
+        getCharacter: (char) => this.cryptoTextFont.characters[char] || null
+      };
+      
+      // Based on the CryptoText SVG Font Standard structure:
+      // Characters are in groups under filter="url(#techGlow)"
+      const mainGroups = Array.from(svgDoc.querySelectorAll('g[filter="url(#techGlow)"]'));
+      
+      if (mainGroups.length === 0) {
+        console.warn('No character groups found in font SVG');
+        return;
+      }
+      
+      // Process standard English alphabet (A-Z)
+      const alphabetGroups = mainGroups[0].querySelectorAll('g > g');
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      
+      alphabetGroups.forEach((group, index) => {
+        if (index < alphabet.length) {
+          const char = alphabet[index];
+          // Get all paths and circles in this group
+          const paths = group.querySelectorAll('path');
+          const circles = group.querySelectorAll('circle');
+          
+          let svg = '';
+          paths.forEach(path => { svg += path.outerHTML; });
+          circles.forEach(circle => { svg += circle.outerHTML; });
+          
+          this.cryptoTextFont.characters[char] = svg;
+        }
+      });
+      
+      // Process numbers (0-9)
+      const numberGroups = mainGroups.length > 1 ? mainGroups[1].querySelectorAll('g') : [];
+      const numbers = '0123456789';
+      
+      numberGroups.forEach((group, index) => {
+        if (index < numbers.length) {
+          const char = numbers[index];
+          // Get all paths and circles in this group
+          const paths = group.querySelectorAll('path');
+          const circles = group.querySelectorAll('circle');
+          
+          let svg = '';
+          paths.forEach(path => { svg += path.outerHTML; });
+          circles.forEach(circle => { svg += circle.outerHTML; });
+          
+          this.cryptoTextFont.characters[char] = svg;
+        }
+      });
+      
+      // Process special characters if available
+      const specialGroups = mainGroups.length > 2 ? mainGroups[2].querySelectorAll('g') : [];
+      const specialChars = '.,:;?!@#$%^&*()_+-=[]{}|<>/\\';
+      
+      specialGroups.forEach((group, index) => {
+        if (index < specialChars.length) {
+          const char = specialChars[index];
+          // Get all paths and circles in this group
+          const paths = group.querySelectorAll('path');
+          const circles = group.querySelectorAll('circle');
+          
+          let svg = '';
+          paths.forEach(path => { svg += path.outerHTML; });
+          circles.forEach(circle => { svg += circle.outerHTML; });
+          
+          this.cryptoTextFont.characters[char] = svg;
+        }
+      });
+      
+      // Set loading state
+      this.loadingStates.fontLoaded = true;
+      
+      const charCount = Object.keys(this.cryptoTextFont.characters).length;
+      console.log(`Loaded ${charCount} characters from CryptoText font`);
+    } catch (error) {
+      console.error('Error loading CryptoText font:', error);
+      this.loadingStates.fontLoaded = false;
+      throw error;
+    }
+  }
+  
+  /**
+   * Process SVG paths for animation
+   */
+  processPaths() {
+    // Create a document fragment for batch operations
+    const fragment = document.createDocumentFragment();
+    const svgRoot = this.svgContainer;
+    
+    // Remove all paths temporarily for batch processing
+    const tempPaths = [];
+    while (svgRoot.firstChild) {
+      tempPaths.push(svgRoot.firstChild);
+      fragment.appendChild(svgRoot.firstChild);
+    }
+    
+    // Group paths by fill color
+    this.paths.forEach((path, index) => {
+      const fill = path.getAttribute('fill') || '#000000';
+      
+      // Store original fill for reference
+      path.dataset.originalFill = fill;
+      path.dataset.pathIndex = index;
+      
+      // Group by color
+      if (!this.colorGroups.has(fill)) {
+        this.colorGroups.set(fill, []);
+      }
+      this.colorGroups.get(fill).push(path);
+      
+      // Initial setup for animation
+      gsap.set(path, {
+        fill: 'none',
+        stroke: fill,
+        strokeWidth: 1,
+        opacity: 0
+      });
+    });
+    
+    // Re-add all paths at once
+    svgRoot.appendChild(fragment);
+    
+    console.log(`Processed paths into ${this.colorGroups.size} color groups`);
+  }
+  
+  /**
+   * Add an event listener
+   * @param {string} eventName - The name of the event
+   * @param {Function} callback - The callback function
+   */
+  on(eventName, callback) {
+    if (this.eventListeners[eventName]) {
+      this.eventListeners[eventName].push(callback);
+    } else {
+      console.warn(`Unknown event type: ${eventName}`);
+    }
+  }
+  
+  /**
+   * Remove an event listener
+   * @param {string} eventName - The name of the event
+   * @param {Function} callback - The callback function to remove
+   */
+  off(eventName, callback) {
+    if (this.eventListeners[eventName]) {
+      this.eventListeners[eventName] = this.eventListeners[eventName]
+        .filter(listener => listener !== callback);
+    }
+  }
+  
+  /**
+   * Trigger an event
+   * @param {string} eventName - The name of the event
+   * @param {...any} args - Arguments to pass to listeners
+   */
+  triggerEvent(eventName, ...args) {
+    if (this.eventListeners[eventName]) {
+      for (const callback of this.eventListeners[eventName]) {
+        try {
+          callback(...args);
+        } catch (error) {
+          console.error(`Error in ${eventName} event listener:`, error);
+        }
+      }
+    }
+  }
+}
+
+    /**
+ * Methods for animation and rendering in MerkleMemoryVisualization
+ * @extends MerkleMemoryVisualization
+ */
+class MerkleMemoryVisualization_AnimationMethods {
+  /**
+ * Update visualization with new block data
+ * @param {Object} blockData - The block data to visualize
+ * @returns {Promise<void>}
+ */
+async render(blockData) {
+  if (!this.isInitialized) {
+    console.warn('Visualization not yet initialized, cannot render');
+    return;
+  }
+  
+  // Check if a full sequence is already in progress
+  if (this.animationState.sequenceInProgress) {
+    console.log('Animation sequence already in progress, queueing update');
+    this.animationState.pendingBlockData = blockData;
+    return;
+  }
+  
+  // Check if simple animation is in progress
+  if (this.animationState.isAnimating) {
+    console.log('Animation already in progress, queueing update');
+    this.animationState.pendingBlockData = blockData;
+    return;
+  }
+  
+  // Check if this is a new block or the same block we're already displaying
+  const isNewBlock = !this.animationState.currentBlock || 
+                    this.animationState.currentBlock.height !== blockData.height;
+  
+  console.log(`Rendering visualization for block ${blockData.height} (${isNewBlock ? 'new block' : 'update'})`);
+  
+  // Set animation state
+  this.animationState.isAnimating = true;
+  this.animationState.currentBlock = blockData;
+  
+  // Update info overlay (don't show automatically)
+  this.updateInfoDisplay(blockData, false);
+  
+  // Create animation sequence
+  await this.createAnimationSequence(blockData);
+  
+  // Reset animation state
+  this.animationState.isAnimating = false;
+  
+  // Trigger animation complete event
+  this.triggerEvent('animationComplete', blockData);
+  
+  // Check for pending updates
+  if (this.animationState.pendingBlockData) {
+    const pendingBlock = this.animationState.pendingBlockData;
+    this.animationState.pendingBlockData = null;
+    await this.render(pendingBlock);
+  }
+}
+  
+  /**
+ * Create animation sequence for block visualization
+ * @param {Object} blockData - The block data to visualize
+ * @returns {Promise<void>}
+ */
+async createAnimationSequence(blockData) {
+  console.log(`Creating animation sequence for block ${blockData.height}`);
+  
+  // Stop any ongoing memory sequence
+  if (this.memoryTimeline) {
+    console.log('Stopping ongoing memory sequence');
+    this.memoryTimeline.kill();
+    this.memoryTimeline = null;
+    
+    // Remove existing memory container
+    const memoryContainer = this.svgContainer.querySelector('#memory-container');
+    if (memoryContainer) {
+      memoryContainer.parentNode.removeChild(memoryContainer);
+    }
+  }
+  
+  // Set sequence in progress flag
+  this.animationState.sequenceInProgress = true;
+  
+  // Clear previous timeline
+  this.mainTimeline.clear();
+    
+    // Generate colors from merkle root
+    const colors = this.generateMerkleColors(blockData.merkle_root);
+    
+    // Extract non-zero characters from block hash for timing
+    const hashChars = blockData.hash.replace(/^0+/, '').substring(0, 12);
+    const hashValues = hashChars.split('').map(c => parseInt(c, 16));
+    
+    // Use transaction count to determine complexity/density
+    const complexity = Math.min(blockData.transaction_count / 5000, 1);
+    const groupsToReveal = Math.ceil(this.colorGroups.size * complexity);
+    
+    // Sort color groups by relevance
+    const sortedGroups = this.sortColorGroupsByRelevance(colors.primary);
+    
+    // Create main reveal animation
+    let groupIndex = 0;
+    let timePosition = 0;
+    
+    // Core animation for path reveals
+    for (const [color, paths] of sortedGroups) {
+      // Skip if we've reached our complexity limit
+      if (groupIndex >= groupsToReveal) {
+        // Fade out any remaining visible groups
+        if (this.isGroupVisible(color)) {
+          this.mainTimeline.to(paths, {
+            opacity: 0,
+            duration: 1,
+            stagger: 0.01,
+            ease: "power1.out"
+          }, timePosition);
+        }
+        groupIndex++;
+        continue;
+      }
+      
+      // Calculate stroke properties based on block data
+      const strokeColor = this.deriveStrokeColor(color, colors, groupIndex);
+      const strokeWidth = this.mapToRange(hashValues[groupIndex % hashValues.length], 0, 15, 0.5, 3);
+      
+      // Calculate stagger based on hash digits
+      const staggerBase = this.mapToRange(hashValues[(groupIndex + 1) % hashValues.length], 0, 15, 0.01, 0.1);
+      const staggerAmount = Math.min(0.3 + (staggerBase * paths.length), 2.0); // Cap at 2 seconds
+      
+      // Create label for this group
+      const groupLabel = `group-${groupIndex}`;
+      this.mainTimeline.addLabel(groupLabel, timePosition);
+      
+      // Add reveal animation with enhanced GSAP techniques
+      this.mainTimeline.to(paths, {
+        opacity: 1,
+        stroke: strokeColor,
+        strokeWidth: strokeWidth,
+        duration: 1.5,
+        stagger: {
+          amount: staggerAmount,
+          from: this.app.animationController.getStaggerOrigin(),
+          ease: "power2.inOut"
+        }
+      }, groupLabel);
+      
+      // Add special effects for some groups if effects are enabled
+      if (this.animationState.effectsEnabled) {
+        this.addSpecialEffect(paths, hashValues[groupIndex % hashValues.length] % 4, groupLabel, 
+                             hashValues, groupIndex, strokeWidth, strokeColor, staggerAmount);
+      }
+      
+      // Update position for next group
+      timePosition += 0.3;
+      groupIndex++;
+    }
+    
+    // Add final transform effect
+    timePosition += 1;
+    this.addFinalTransformEffect(timePosition, blockData);
+    
+    // Return a promise that resolves when the animation is complete
+    return new Promise((resolve) => {
+      // Set onComplete callback
+      this.mainTimeline.eventCallback('onComplete', () => {
+        // Reset sequence flag
+        this.animationState.sequenceInProgress = false;
+        resolve();
+      });
+    
+      // Play the timeline
+      this.mainTimeline.play(0);
+    });
+  }
+  
+  /**
+   * Add a special effect to a group of paths
+   * @param {Array} paths - The paths to animate
+   * @param {number} effectType - The type of effect (0-3)
+   * @param {string} groupLabel - The timeline label for this group
+   * @param {Array} hashValues - Hash values for random numbers
+   * @param {number} groupIndex - Current group index
+   * @param {number} strokeWidth - Stroke width for the paths
+   * @param {string} strokeColor - Stroke color for the paths
+   * @param {number} staggerAmount - Amount of stagger for animations
+   */
+  addSpecialEffect(paths, effectType, groupLabel, hashValues, groupIndex, strokeWidth, strokeColor, staggerAmount) {
+    // Apply performance-sensitive effects only if enough GPU power is available
+    const isHighPerformance = this.app.animationController.isHighPerformanceMode();
+    
+    switch (effectType) {
+      case 0:
+        // Dash array effect (lightweight)
+        const dashValue = hashValues[groupIndex % hashValues.length] * 4;
+        this.mainTimeline.to(paths, {
+          strokeDasharray: `${dashValue} ${dashValue / 2}`,
+          duration: 0.5,
+          stagger: {
+            amount: staggerAmount / 2,
+            from: "edges"
+          }
+        }, `${groupLabel}+=0.5`);
+        break;
+        
+      case 1:
+        // Glow effect (medium weight)
+        if (isHighPerformance) {
+          this.mainTimeline.to(paths, {
+            filter: `drop-shadow(0 0 ${strokeWidth * 2}px ${strokeColor})`,
+            duration: 0.7,
+            stagger: {
+              amount: staggerAmount / 3,
+              from: "center"
+            }
+          }, `${groupLabel}+=0.3`);
+        } else {
+          // Fallback for low performance: simple opacity pulse
+          this.mainTimeline.to(paths, {
+            opacity: 0.7,
+            duration: 0.7,
+            repeat: 1,
+            yoyo: true,
+            stagger: {
+              amount: staggerAmount / 3,
+              from: "center"
+            }
+          }, `${groupLabel}+=0.3`);
+        }
+        break;
+        
+      case 2:
+        // Rotation effect for small paths only (heavy)
+        if (isHighPerformance) {
+          const smallPaths = paths.filter(p => {
+            const bbox = p.getBBox();
+            return bbox.width < 50 && bbox.height < 50;
+          });
+          
+          if (smallPaths.length > 0) {
+            this.mainTimeline.to(smallPaths, {
+              rotation: hashValues[(groupIndex + 2) % hashValues.length] * 24,
+              transformOrigin: "center center",
+              duration: 1.2,
+              stagger: {
+                amount: staggerAmount,
+                from: "start"
+              },
+              ease: "elastic.out(1, 0.75)"
+            }, `${groupLabel}+=0.4`);
+          }
+        }
+        break;
+        
+      case 3:
+        // Scale pulse (medium weight)
+        this.mainTimeline.to(paths, {
+          scale: 1.05,
+          transformOrigin: "center center",
+          duration: 0.8,
+          stagger: {
+            amount: staggerAmount / 2,
+            from: "random"
+          },
+          yoyo: true,
+          repeat: 1,
+          ease: "sine.inOut"
+        }, `${groupLabel}+=0.6`);
+        break;
+    }
+  }
+  
+  /**
+ * Add final transform effect to display block data
+ * @param {number} timePosition - Position in the timeline
+ * @param {Object} blockData - Block data to display
+ */
+addFinalTransformEffect(timePosition, blockData) {
+  // Remove any existing final transform
+  const existingElement = this.svgContainer.querySelector('#final-transform');
+  if (existingElement && existingElement.parentNode) {
+    existingElement.parentNode.removeChild(existingElement);
+  }
+  
+  if (!blockData) return timePosition;
+  
+  // Extract last 12 characters from merkle root
+  const merkleChars = blockData.merkle_root.slice(-12).toUpperCase();
+  
+  // Create a group for the final transform
+  const finalGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  finalGroup.setAttribute('id', 'final-transform');
+  this.svgContainer.appendChild(finalGroup);
+  
+  // Generate colors from merkle root
+  const colors = this.generateMerkleColors(blockData.merkle_root);
+  
+  // Create merkle text with special styling
+  const merkleText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  merkleText.textContent = merkleChars;
+  merkleText.setAttribute('x', '288'); // Center
+  merkleText.setAttribute('y', '520'); // Bottom area
+  merkleText.setAttribute('fill', colors.primary);
+  merkleText.setAttribute('font-family', 'monospace');
+  merkleText.setAttribute('font-size', '20');
+  merkleText.setAttribute('text-anchor', 'middle'); // Center alignment
+  merkleText.setAttribute('class', 'final-text');
+  
+  finalGroup.appendChild(merkleText);
+  
+  // Add height text below
+  const heightText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  heightText.textContent = `#${blockData.height}`;
+  heightText.setAttribute('x', '288'); // Center
+  heightText.setAttribute('y', '540'); // Below merkle text
+  heightText.setAttribute('fill', colors.secondary);
+  heightText.setAttribute('font-family', 'monospace');
+  heightText.setAttribute('font-size', '12');
+  heightText.setAttribute('text-anchor', 'middle'); // Center alignment
+  heightText.setAttribute('class', 'final-height');
+  
+  finalGroup.appendChild(heightText);
+  
+  // Set initial state
+  gsap.set(finalGroup, {
+    opacity: 0,
+    y: 10 // Start below final position
+  });
+  
+  // Calculate the display duration based on merkle root length
+  const displayDuration = 4; // 4 seconds display
+  const fadeOutDuration = 0.8;
+  
+  // Create a timeline for the final transform
+  const finalTimeline = gsap.timeline();
+  
+  // Add entrance animation
+  finalTimeline.to(finalGroup, {
+    opacity: 1,
+    y: 0,
+    duration: 1,
+    ease: "back.out(1.2)"
+  });
+  
+  // Add subtle pulsing effect
+  finalTimeline.to(merkleText, {
+    opacity: 0.8,
+    duration: 1.5,
+    repeat: 1,
+    yoyo: true,
+    ease: "sine.inOut"
+  }, "-=0.5"); // Start slightly before the entrance completes
+  
+  // Add pause for display
+  finalTimeline.to({}, { duration: displayDuration });
+  
+  // Add fade out
+  finalTimeline.to(finalGroup, {
+    opacity: 0,
+    duration: fadeOutDuration,
+    ease: "power1.in",
+    onComplete: () => {
+      // This will trigger when the final transform has completed
+      console.log('Final transform complete, now showing memory blocks');
+      
+      // Check if we have any previous blocks to show
+      const hasMemoryBlocks = this.app.dataManager && 
+                             this.app.dataManager.getAllBlocks().length > 1;
+      
+      if (hasMemoryBlocks) {
+        // Call the memory effects function
+        this.addMemoryEffects();
+      } else {
+        console.log('No previous blocks to show in memory sequence');
+      }
+      
+      // Schedule cleanup of the final transform
+      if (finalGroup.parentNode) {
+        finalGroup.parentNode.removeChild(finalGroup);
+      }
+    }
+  });
+  
+  // Add to main timeline
+  this.mainTimeline.add(finalTimeline, timePosition);
+  
+  // Return the end time for scheduling
+  return timePosition + displayDuration + fadeOutDuration + 1;
+}
+  
+  /**
+ * Add memory effects to visualize past blocks
+ */
+addMemoryEffects() {
+  console.log('Adding memory effects');
+  
+  // Clear any existing memory sequence animation
+  if (this.memoryTimeline) {
+    this.memoryTimeline.kill();
+    this.memoryTimeline = null;
+  }
+  
+  // Get block memory from data manager
+  const blockMemory = this.app.dataManager ? 
+    this.app.dataManager.getAllBlocks() : [];
+  
+  // Skip if we don't have enough blocks
+  if (blockMemory.length <= 1) {
+    console.warn('Not enough blocks in memory to display');
+    return;
+  }
+  
+  // Remove any existing memory container
+  const existingContainer = this.svgContainer.querySelector('#memory-container');
+  if (existingContainer) {
+    existingContainer.parentNode.removeChild(existingContainer);
+    console.log('Removed existing memory container');
+  }
+  
+  // Create fresh memory container
+  const memoryContainer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  memoryContainer.setAttribute('id', 'memory-container');
+  this.svgContainer.appendChild(memoryContainer);
+  console.log('Created fresh memory container');
+  
+  // Calculate layout properties
+  const centerX = 288; // Center X
+  const baseY = 520; // Base Y position - position all blocks at same Y
+  
+  // Process each block (skipping current block at index 0)
+  const memoryBlocks = [];
+  
+  console.log(`Processing ${blockMemory.length - 1} memory blocks`);
+  
+  // Create all memory blocks but initially hide them
+  for (let i = 1; i < blockMemory.length; i++) {
+    const block = blockMemory[i];
+    if (!block || !block.merkle_root) {
+      console.warn(`Skipping invalid block at index ${i}`);
+      continue;
+    }
+    
+    console.log(`Creating memory block for block ${block.height} at index ${i}`);
+    
+    // Create memory block group
+    const blockGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    blockGroup.classList.add('memory-block');
+    blockGroup.dataset.height = block.height;
+    blockGroup.dataset.index = i;
+    memoryContainer.appendChild(blockGroup);
+    
+    // All blocks positioned at the same Y position (baseY)
+    const yPos = baseY;
+    
+    // Generate colors from block merkle root
+    // Extract non-zero characters from merkle root for color generation
+    const nonZeroMerkle = block.merkle_root.replace(/^0+/, '');
+    let primaryColor = `#${nonZeroMerkle.substring(0, 6)}`;
+    let secondaryColor = `#${nonZeroMerkle.substring(6, 12) || nonZeroMerkle.substring(0, 6)}`;
+    let accentColor = `#${nonZeroMerkle.substring(12, 18) || nonZeroMerkle.substring(0, 6)}`;
+    
+    // Verify colors are valid hex colors
+    if (!/^#[0-9A-F]{6}$/i.test(primaryColor)) primaryColor = '#FFFFFF';
+    if (!/^#[0-9A-F]{6}$/i.test(secondaryColor)) secondaryColor = '#AAAAAA';
+    if (!/^#[0-9A-F]{6}$/i.test(accentColor)) accentColor = '#CCCCCC';
+    
+    console.log(`Block ${block.height} colors:`, {
+      primary: primaryColor,
+      secondary: secondaryColor,
+      accent: accentColor
+    });
+    
+    // Create block text with merkle root excerpt
+    const merkleChars = block.merkle_root.slice(-8).toUpperCase();
+    
+    const textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    textElement.textContent = merkleChars;
+    textElement.setAttribute('x', centerX);
+    textElement.setAttribute('y', yPos);
+    textElement.setAttribute('fill', primaryColor);
+    textElement.setAttribute('font-family', 'monospace');
+    textElement.setAttribute('font-size', '16');
+    textElement.setAttribute('text-anchor', 'middle');
+    textElement.setAttribute('class', 'memory-text');
+    blockGroup.appendChild(textElement);
+    
+    // Add block height with secondary color
+    const heightText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    heightText.textContent = `#${block.height}`;
+    heightText.setAttribute('x', centerX);
+    heightText.setAttribute('y', yPos + 16);
+    heightText.setAttribute('fill', secondaryColor);
+    heightText.setAttribute('font-family', 'monospace');
+    heightText.setAttribute('font-size', '10');
+    heightText.setAttribute('text-anchor', 'middle');
+    heightText.setAttribute('class', 'height-text');
+    blockGroup.appendChild(heightText);
+    
+    // Add time ago indicator with accent color
+    const timestamp = new Date(block.time * 1000);
+    const timeAgo = this.formatTimeAgo(timestamp);
+    
+    const timeText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    timeText.textContent = timeAgo;
+    timeText.setAttribute('x', centerX + 90); // Offset to right side
+    timeText.setAttribute('y', yPos);
+    timeText.setAttribute('fill', accentColor);
+    timeText.setAttribute('font-family', 'monospace');
+    timeText.setAttribute('font-size', '8');
+    timeText.setAttribute('text-anchor', 'start');
+    timeText.setAttribute('class', 'time-text');
+    blockGroup.appendChild(timeText);
+    
+    // Set initial opacity to 0 for animation
+    gsap.set(blockGroup, { opacity: 0 });
+    
+    memoryBlocks.push(blockGroup);
+  }
+  
+  if (memoryBlocks.length === 0) {
+    console.warn('No memory blocks created');
+    return;
+  }
+  
+  console.log(`Created ${memoryBlocks.length} memory blocks`);
+  
+  // Create a standalone timeline for memory sequence
+  this.memoryTimeline = gsap.timeline({
+    onComplete: () => {
+      console.log('Memory sequence complete, cleaning up');
+      // Remove the container after all animations complete
+      gsap.to(memoryContainer, {
+        opacity: 0,
+        duration: 0.5,
+        onComplete: () => {
+          if (memoryContainer.parentNode) {
+            memoryContainer.parentNode.removeChild(memoryContainer);
+          }
+          this.memoryTimeline = null;
+        }
+      });
+    }
+  });
+  
+  // Show blocks one by one, each replacing the previous one
+  memoryBlocks.forEach((block, index) => {
+    // Time position in the sequence
+    const timePos = index * 2.0; // 2s per block
+    const duration = 1.5; // Show each block for 1.5s
+    
+    // Fade in block
+    this.memoryTimeline.to(block, {
+      opacity: 1,
+      duration: 0.4,
+      ease: "power1.out"
+    }, timePos);
+    
+    // Add pulse animation
+    this.memoryTimeline.to(block.querySelector('.memory-text'), {
+      scale: 1.1,
+      opacity: 0.9,
+      transformOrigin: "center center",
+      duration: 0.4,
+      repeat: 1,
+      yoyo: true
+    }, timePos + 0.4);
+    
+    // Fade out before the next block appears
+    if (index < memoryBlocks.length - 1) {
+      this.memoryTimeline.to(block, {
+        opacity: 0,
+        duration: 0.4,
+        ease: "power1.in"
+      }, timePos + duration);
+    } else {
+      // For the last block, keep it visible a bit longer
+      this.memoryTimeline.to(block, {
+        opacity: 0,
+        duration: 0.4,
+        delay: 1.0, // Extra delay for the last block
+        ease: "power1.in"
+      }, timePos + duration);
+    }
+  });
+  
+  // Play the timeline
+  this.memoryTimeline.play();
+}
+  
+  /**
+   * Update info display with block data
+   * @param {Object} blockData - The block data to display
+   */
+  updateInfoDisplay(blockData, showOverlay = false) {
+    if (!this.infoOverlay || !blockData) return;
+    
+    const timeString = new Date(blockData.time * 1000).toLocaleTimeString();
+    this.infoOverlay.innerHTML = `
+      <div style="opacity: 0.9">Block: ${blockData.height}</div>
+      <div style="opacity: 0.9">Time: ${timeString}</div>
+      <div style="opacity: 0.9">Transactions: ${blockData.transaction_count.toLocaleString()}</div>
+      <div style="opacity: 0.8">Hash: ${blockData.hash.substring(0, 6)}...${blockData.hash.substring(blockData.hash.length - 6)}</div>
+    `;
+    
+    // Only show the overlay if specifically requested
+    if (showOverlay) {
+      gsap.to(this.infoOverlay, {
+        opacity: 0.9,
+        duration: 0.3
+      });
+    }
+  }
+  
+  /**
+   * Format a date as time ago string
+   * @param {Date} date - The date to format
+   * @returns {string} Formatted time ago string
+   */
+  formatTimeAgo(date) {
+    const now = new Date();
+    const diffSeconds = Math.floor((now - date) / 1000);
+    
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
+    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
+    if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}h ago`;
+    return `${Math.floor(diffSeconds / 86400)}d ago`;
+  }
+}
+
+// Apply methods to MerkleMemoryVisualization prototype
+Object.getOwnPropertyNames(MerkleMemoryVisualization_AnimationMethods.prototype)
+  .filter(prop => prop !== 'constructor')
+  .forEach(method => {
+    MerkleMemoryVisualization.prototype[method] = 
+      MerkleMemoryVisualization_AnimationMethods.prototype[method];
+  });
+
+    /**
+ * Utility methods for MerkleMemoryVisualization
+ * @extends MerkleMemoryVisualization
+ */
+class MerkleMemoryVisualization_UtilityMethods {
+  /**
+   * Generate colors from merkle root
+   * @param {string} merkleRoot - The merkle root string
+   * @returns {Object} Color palette
+   */
+  generateMerkleColors(merkleRoot) {
+    if (!merkleRoot || typeof merkleRoot !== 'string') {
+      return {
+        primary: '#ffffff',
+        secondary: '#aaaaaa',
+        accent: '#cccccc',
+        highlight: '#eeeeee'
+      };
+    }
+    
+    // Find first non-zero digit
+    const nonZeroStart = merkleRoot.replace(/^0+/, '');
+    
+    // Generate color palette from different sections
+    return {
+      primary: `#${nonZeroStart.substring(0, 6)}`,
+      secondary: `#${nonZeroStart.substring(6, 12) || nonZeroStart.substring(0, 6)}`,
+      accent: `#${nonZeroStart.substring(12, 18) || nonZeroStart.substring(0, 6)}`,
+      highlight: `#${nonZeroStart.substring(18, 24) || nonZeroStart.substring(6, 12)}`
+    };
+  }
+  
+  /**
+   * Sort color groups by relevance to a reference color
+   * @param {string} referenceColor - The reference color
+   * @returns {Array} Sorted color entries
+   */
+  sortColorGroupsByRelevance(referenceColor) {
+    const colorEntries = Array.from(this.colorGroups.entries());
+    
+    // Calculate color distance
+    return colorEntries.sort((a, b) => {
+      const distA = this.colorDistance(a[0], referenceColor);
+      const distB = this.colorDistance(b[0], referenceColor);
+      return distA - distB;
+    });
+  }
+  
+  /**
+   * Calculate simple color distance
+   * @param {string} color1 - First color in hex format
+   * @param {string} color2 - Second color in hex format
+   * @returns {number} Color distance
+   */
+  colorDistance(color1, color2) {
+    try {
+      // Convert hex to RGB
+      const rgb1 = this.hexToRgb(color1);
+      const rgb2 = this.hexToRgb(color2);
+      
+      if (!rgb1 || !rgb2) return 1000; // Large distance for invalid colors
+      
+      // Calculate Euclidean distance
+      return Math.sqrt(
+        Math.pow(rgb1.r - rgb2.r, 2) +
+        Math.pow(rgb1.g - rgb2.g, 2) +
+        Math.pow(rgb1.b - rgb2.b, 2)
+      );
+    } catch (e) {
+      return 1000; // Return large distance on error
+    }
+  }
+  
+  /**
+   * Convert hex color to RGB
+   * @param {string} hex - Hex color string
+   * @returns {Object|null} RGB color object or null if invalid
+   */
+  hexToRgb(hex) {
+    // Remove # if present
+    hex = hex.replace(/^#/, '');
+    
+    // Handle 3-character hex
+    if (hex.length === 3) {
+      hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    }
+    
+    // Parse hex
+    const bigint = parseInt(hex, 16);
+    if (isNaN(bigint)) return null;
+    
+    return {
+      r: (bigint >> 16) & 255,
+      g: (bigint >> 8) & 255,
+      b: bigint & 255
+    };
+  }
+  
+  /**
+   * Derive stroke color based on original fill and merkle colors
+   * @param {string} originalFill - Original fill color
+   * @param {Object} merkleColors - Merkle-derived colors
+   * @param {number} groupIndex - Group index
+   * @returns {string} Derived stroke color
+   */
+  deriveStrokeColor(originalFill, merkleColors, groupIndex) {
+    // For dark fills, use brighter merkle colors
+    if (this.isLightColor(originalFill)) {
+      return groupIndex % 2 === 0 ? merkleColors.primary : merkleColors.secondary;
+    } else {
+      return groupIndex % 2 === 0 ? merkleColors.highlight : merkleColors.accent;
+    }
+  }
+  
+  /**
+   * Check if a color is light
+   * @param {string} hexColor - Hex color string
+   * @returns {boolean} True if color is light
+   */
+  isLightColor(hexColor) {
+    const rgb = this.hexToRgb(hexColor);
+    if (!rgb) return false;
+    
+    // Calculate relative luminance
+    return (rgb.r * 0.299 + rgb.g * 0.587 + rgb.b * 0.114) > 128;
+  }
+  
+  /**
+   * Map a value from one range to another
+   * @param {number} value - The value to map
+   * @param {number} fromMin - Original range minimum
+   * @param {number} fromMax - Original range maximum
+   * @param {number} toMin - Target range minimum
+   * @param {number} toMax - Target range maximum
+   * @returns {number} Mapped value
+   */
+  mapToRange(value, fromMin, fromMax, toMin, toMax) {
+    // Clamp value to fromMin-fromMax range
+    const clampedValue = Math.max(fromMin, Math.min(fromMax, value));
+    
+    // Map to target range
+    return ((clampedValue - fromMin) / (fromMax - fromMin)) * (toMax - toMin) + toMin;
+  }
+  
+  /**
+   * Check if a group is currently visible
+   * @param {string} groupColor - Group color
+   * @returns {boolean} True if group is visible
+   */
+  isGroupVisible(groupColor) {
+    const paths = this.colorGroups.get(groupColor);
+    if (!paths || paths.length === 0) return false;
+    
+    // Check the first path in the group
+    return parseFloat(window.getComputedStyle(paths[0]).opacity) > 0.1;
+  }
+  
+  /**
+   * Create a particle effect at a position
+   * @param {number} x - X coordinate
+   * @param {number} y - Y coordinate
+   * @param {string} color - Particle color
+   * @param {number} count - Number of particles
+   */
+  createParticleEffect(x, y, color, count = 20) {
+    // Skip if animation controller disables effects
+    if (!this.app.animationController.areEffectsEnabled()) {
+      return;
+    }
+    
+    // Create particle group
+    const particleGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    particleGroup.classList.add('particle-effect');
+    this.svgContainer.appendChild(particleGroup);
+    
+    // Create particles
+    const particles = [];
+    for (let i = 0; i < count; i++) {
+      const particle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      particle.setAttribute('cx', x);
+      particle.setAttribute('cy', y);
+      particle.setAttribute('r', 1 + Math.random() * 2);
+      particle.setAttribute('fill', color);
+      particleGroup.appendChild(particle);
+      particles.push(particle);
+    }
+    
+    // Animate particles
+    gsap.to(particles, {
+      attr: {
+        cx: () => x + (Math.random() * 2 - 1) * 50,
+        cy: () => y + (Math.random() * 2 - 1) * 50,
+        r: 0
+      },
+      opacity: 0,
+      duration: 1.5,
+      ease: "power2.out",
+      stagger: {
+        amount: 0.5,
+        from: "center"
+      },
+      onComplete: () => {
+        if (particleGroup.parentNode) {
+          particleGroup.parentNode.removeChild(particleGroup);
+        }
+      }
+    });
+  }
+  
+  /**
+   * Enable or disable effects based on performance
+   * @param {boolean} enabled - Whether effects should be enabled
+   */
+  setEffectsEnabled(enabled) {
+    this.animationState.effectsEnabled = enabled;
+    console.log(`Visual effects ${enabled ? 'enabled' : 'disabled'}`);
+  }
+  
+  /**
+   * Clean up resources and prepare for disposal
+   */
+  dispose() {
+    // Clear timelines
+    if (this.mainTimeline) {
+      this.mainTimeline.kill();
+      this.mainTimeline = null;
+    }
+    
+    // Clear event listeners
+    this.eventListeners = {
+      'ready': [],
+      'animationComplete': [],
+      'error': []
+    };
+    
+    // Remove all SVG content
+    if (this.svgContainer) {
+      while (this.svgContainer.firstChild) {
+        this.svgContainer.removeChild(this.svgContainer.firstChild);
+      }
+    }
+    
+    // Reset state
+    this.paths = [];
+    this.colorGroups.clear();
+    this.isInitialized = false;
+    
+    console.log('Visualization disposed');
+  }
+}
+
+// Apply utility methods to MerkleMemoryVisualization prototype
+Object.getOwnPropertyNames(MerkleMemoryVisualization_UtilityMethods.prototype)
+  .filter(prop => prop !== 'constructor')
+  .forEach(method => {
+    MerkleMemoryVisualization.prototype[method] = 
+      MerkleMemoryVisualization_UtilityMethods.prototype[method];
+  });
+
+/**
+ * Integration methods for MerkleMemoryVisualization with AnimationController
+ */
+class MerkleMemoryVisualization_Integration {
+  /**
+   * Initialize integration with AnimationController
+   */
+  initializeWithAnimationController() {
+    // Get animation controller from app
+    const animationController = this.app.animationController;
+    if (!animationController) {
+      console.warn('AnimationController not available for integration');
+      return;
+    }
+    
+    // Register for performance status updates
+    animationController.registerPerformanceCallback((performanceStatus) => {
+      this.handlePerformanceStatus(performanceStatus);
+    });
+    
+    // Register for visibility changes
+    animationController.registerVisibilityCallback((isVisible) => {
+      this.handleVisibilityChange(isVisible);
+    });
+    
+    console.log('Initialized integration with AnimationController');
+  }
+  
+  /**
+   * Handle performance status updates from AnimationController
+   * @param {Object} performanceStatus - Current performance status
+   */
+  handlePerformanceStatus(performanceStatus) {
+    // Adjust visual effects based on performance
+    this.setEffectsEnabled(performanceStatus.canUseEffects);
+    
+    // Adjust animation complexity if needed
+    if (performanceStatus.fps < 30) {
+      console.log('Performance optimization: reducing animation complexity');
+      
+      // Reduce any active animations
+      if (this.mainTimeline && this.mainTimeline.isActive()) {
+        this.mainTimeline.timeScale(1.5); // Speed up animations
+      }
+    }
+  }
+  
+  /**
+   * Handle visibility changes
+   * @param {boolean} isVisible - Whether the page is visible
+   */
+  handleVisibilityChange(isVisible) {
+    if (!isVisible) {
+      // Pause animations when page is not visible
+      if (this.mainTimeline) {
+        this.mainTimeline.pause();
+      }
+    } else {
+      // Resume animations when page becomes visible again
+      if (this.mainTimeline && this.mainTimeline.paused()) {
+        this.mainTimeline.play();
+      }
+    }
+  }
+  
+  /**
+   * Create an enhanced particle effect using AnimationController
+   * @param {number} x - X coordinate
+   * @param {number} y - Y coordinate
+   * @param {string} color - Particle color
+   * @param {Object} options - Additional options
+   */
+  createEnhancedParticleEffect(x, y, color, options = {}) {
+    // Get animation controller
+    const animationController = this.app.animationController;
+    if (!animationController || !animationController.areEffectsEnabled()) {
+      return; // Skip if effects disabled
+    }
+    
+    // Use animation controller to create optimized particles
+    animationController.createOptimizedParticles({
+      container: this.svgContainer,
+      position: { x, y },
+      color: color,
+      count: options.count || 20,
+      spread: options.spread || 50,
+      duration: options.duration || 1.5,
+      size: options.size || { min: 1, max: 3 }
+    });
+  }
+}
+
+// Apply integration methods to MerkleMemoryVisualization prototype
+Object.getOwnPropertyNames(MerkleMemoryVisualization_Integration.prototype)
+  .filter(prop => prop !== 'constructor')
+  .forEach(method => {
+    MerkleMemoryVisualization.prototype[method] = 
+      MerkleMemoryVisualization_Integration.prototype[method];
+  });
+
+    
+
+    /**
+ * Manages animation performance and optimizations
+ */
+class AnimationController {
+  /**
+   * Create a new AnimationController
+   */
+  constructor() {
+    // Performance settings
+    this.fps = 60;
+    this.frameTime = 1000 / this.fps;
+    this.lastFrameTime = 0;
+    this.frameCount = 0;
+    this.fpsHistory = [];
+    this.isBackgroundTab = false;
+    this.isLowPowerMode = false;
+    
+    // Effects settings
+    this.effectsEnabled = true;
+    this.qualityLevel = 1.0; // 1.0 = full quality, 0.0 = minimum quality
+    
+    // Callbacks
+    this.performanceCallbacks = [];
+    this.visibilityCallbacks = [];
+    
+    // Animation state
+    this.isInitialized = false;
+  }
+  
+  /**
+   * Initialize the animation controller
+   */
+  initialize() {
+    if (this.isInitialized) {
+      return;
+    }
+    
+    console.log('Initializing AnimationController');
+    
+    // Setup visibility change detection
+    document.addEventListener('visibilitychange', () => {
+      this.isBackgroundTab = document.hidden;
+      
+      // Notify callbacks about visibility change
+      for (const callback of this.visibilityCallbacks) {
+        try {
+          callback(!document.hidden);
+        } catch (error) {
+          console.error('Error in visibility callback:', error);
+        }
+      }
+      
+      // Adjust settings based on visibility
+      if (document.hidden) {
+        this.pauseNonEssentialAnimations();
+      } else {
+        this.resumeAnimations();
+      }
+    });
+    
+    // Setup performance monitoring
+    this.setupPerformanceMonitoring();
+    
+    // Detect system capabilities
+    this.detectSystemCapabilities();
+    
+    this.isInitialized = true;
+    console.log('AnimationController initialized');
+  }
+  
+  /**
+   * Set up performance monitoring
+   */
+  setupPerformanceMonitoring() {
+    // Create a monitoring function that will run periodically
+    const monitorPerformance = () => {
+      // Calculate current FPS
+      const now = performance.now();
+      const elapsed = now - this.lastFrameTime;
+      
+      if (elapsed >= 1000) { // Update every second
+        const currentFps = this.frameCount / (elapsed / 1000);
+        
+        // Update FPS history
+        this.fpsHistory.push(currentFps);
+        if (this.fpsHistory.length > 10) {
+          this.fpsHistory.shift();
+        }
+        
+        // Reset counters
+        this.frameCount = 0;
+        this.lastFrameTime = now;
+        
+        // Adjust quality based on FPS
+        this.adjustQualityBasedOnFps(currentFps);
+        
+        // Notify performance callbacks
+        this.notifyPerformanceCallbacks();
+      }
+      
+      // Increment frame counter
+      this.frameCount++;
+      
+      // Continue monitoring if initialized
+      if (this.isInitialized) {
+        requestAnimationFrame(monitorPerformance);
+      }
+    };
+    
+    // Start monitoring
+    requestAnimationFrame(monitorPerformance);
+  }
+  
+  /**
+   * Detect system capabilities
+   */
+  detectSystemCapabilities() {
+    // Measure animation performance
+    let startTime = performance.now();
+    let frames = 0;
+    const testDuration = 500; // 500ms test
+    
+    const testAnimation = gsap.to({}, {
+      duration: testDuration / 1000,
+      onUpdate: () => frames++,
+      onComplete: () => {
+        const endTime = performance.now();
+        const duration = endTime - startTime;
+        const measuredFps = frames / (duration / 1000);
+        
+        // If measured FPS is significantly lower than target, assume low power mode
+        this.isLowPowerMode = measuredFps < (this.fps * 0.7);
+        
+        if (this.isLowPowerMode) {
+          console.log('Low power mode detected, optimizing for performance');
+          this.optimizeForLowPower();
+        } else {
+          console.log('Normal power mode detected, using standard settings');
+        }
+        
+        // Notify callbacks about initial performance status
+        this.notifyPerformanceCallbacks();
+      }
+    });
+  }
+  
+  /**
+   * Optimize settings for low power mode
+   */
+  optimizeForLowPower() {
+    // Reduce target FPS
+    this.fps = 30;
+    this.frameTime = 1000 / this.fps;
+    
+    // Reduce quality
+    this.qualityLevel = 0.5;
+    
+    // Limit effects
+    this.effectsEnabled = false;
+    
+    // Apply global GSAP settings for better performance
+    gsap.ticker.fps(this.fps);
+  }
+  
+  /**
+   * Adjust quality based on FPS
+   * @param {number} currentFps - Current FPS
+   */
+  adjustQualityBasedOnFps(currentFps) {
+    // If FPS is significantly below target, reduce quality
+    if (currentFps < this.fps * 0.7 && this.qualityLevel > 0.2) {
+      this.qualityLevel = Math.max(0.2, this.qualityLevel - 0.1);
+      console.log(`Performance optimization: reducing quality to ${this.qualityLevel.toFixed(1)}`);
+      
+      // If FPS is very low, disable effects
+      if (currentFps < this.fps * 0.5) {
+        this.effectsEnabled = false;
+        console.log('Performance optimization: disabling effects');
+      }
+    }
+    // If FPS is good and quality is reduced, gradually restore quality
+    else if (currentFps > this.fps * 0.9 && this.qualityLevel < 1.0) {
+      this.qualityLevel = Math.min(1.0, this.qualityLevel + 0.05);
+      console.log(`Performance optimization: increasing quality to ${this.qualityLevel.toFixed(1)}`);
+      
+      // If FPS is excellent, enable effects
+      if (currentFps > this.fps * 0.95 && !this.effectsEnabled) {
+        this.effectsEnabled = true;
+        console.log('Performance optimization: enabling effects');
+      }
+    }
+  }
+  
+  /**
+   * Pause non-essential animations when tab is inactive
+   */
+  pauseNonEssentialAnimations() {
+    // Reduce GSAP ticker framerate
+    gsap.ticker.fps(10);
+    
+    console.log('Background mode: paused non-essential animations');
+  }
+  
+  /**
+   * Resume animations when tab becomes active
+   */
+  resumeAnimations() {
+    // Restore GSAP ticker framerate
+    gsap.ticker.fps(this.fps);
+    
+    console.log('Foreground mode: resumed animations');
+  }
+  
+  /**
+   * Register a callback for performance status updates
+   * @param {Function} callback - Function to call with performance status
+   */
+  registerPerformanceCallback(callback) {
+    if (typeof callback === 'function') {
+      this.performanceCallbacks.push(callback);
+    }
+  }
+  
+  /**
+   * Register a callback for visibility changes
+   * @param {Function} callback - Function to call with visibility status
+   */
+  registerVisibilityCallback(callback) {
+    if (typeof callback === 'function') {
+      this.visibilityCallbacks.push(callback);
+    }
+  }
+  
+  /**
+   * Notify all performance callbacks about current status
+   */
+  notifyPerformanceCallbacks() {
+    const performanceStatus = {
+      fps: this.getAverageFps(),
+      qualityLevel: this.qualityLevel,
+      canUseEffects: this.effectsEnabled,
+      isLowPowerMode: this.isLowPowerMode,
+      isBackgroundTab: this.isBackgroundTab
+    };
+    
+    for (const callback of this.performanceCallbacks) {
+      try {
+        callback(performanceStatus);
+      } catch (error) {
+        console.error('Error in performance callback:', error);
+      }
+    }
+  }
+  
+  /**
+   * Get the current average FPS
+   * @returns {number} Average FPS
+   */
+  getAverageFps() {
+    if (this.fpsHistory.length === 0) return this.fps;
+    
+    const sum = this.fpsHistory.reduce((a, b) => a + b, 0);
+    return sum / this.fpsHistory.length;
+  }
+  
+  /**
+   * Create optimized particles
+   * @param {Object} options - Particle options
+   */
+  createOptimizedParticles(options) {
+    if (!this.effectsEnabled) return;
+    
+    const { container, position, color, count, spread, duration, size } = options;
+    
+    // Create particle group
+    const particleGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    particleGroup.classList.add('particle-effect');
+    container.appendChild(particleGroup);
+    
+    // Determine optimized particle count based on quality level
+    const optimizedCount = Math.floor(count * this.qualityLevel);
+    
+    // Create particles
+    const particles = [];
+    for (let i = 0; i < optimizedCount; i++) {
+      const particle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      particle.setAttribute('cx', position.x);
+      particle.setAttribute('cy', position.y);
+      particle.setAttribute('r', size.min + Math.random() * (size.max - size.min));
+      particle.setAttribute('fill', color);
+      particleGroup.appendChild(particle);
+      particles.push(particle);
+    }
+    
+    // Animate particles
+    gsap.to(particles, {
+      attr: {
+        cx: () => position.x + (Math.random() * 2 - 1) * spread,
+        cy: () => position.y + (Math.random() * 2 - 1) * spread,
+        r: 0
+      },
+      opacity: 0,
+      duration: duration,
+      ease: "power2.out",
+      stagger: {
+        amount: duration / 3,
+        from: "center"
+      },
+      onComplete: () => {
+        if (particleGroup.parentNode) {
+          particleGroup.parentNode.removeChild(particleGroup);
+        }
+      }
+    });
+  }
+  
+  /**
+   * Notify the animation controller that an animation has completed
+   */
+  notifyAnimationComplete() {
+    // Update performance monitoring
+    this.frameCount = 0;
+    this.lastFrameTime = performance.now();
+  }
+  
+  /**
+   * Check if effects are enabled
+   * @returns {boolean} True if effects are enabled
+   */
+  areEffectsEnabled() {
+    return this.effectsEnabled && !this.isBackgroundTab;
+  }
+  
+  /**
+   * Check if high performance mode is available
+   * @returns {boolean} True if high performance mode is available
+   */
+  isHighPerformanceMode() {
+    return this.qualityLevel > 0.7 && !this.isLowPowerMode && !this.isBackgroundTab;
+  }
+  
+  /**
+   * Get the stagger origin based on performance
+   * @returns {string} Stagger origin
+   */
+  getStaggerOrigin() {
+    // Use simpler stagger origin for low performance
+    if (this.isLowPowerMode || this.qualityLevel < 0.5) {
+      return "start";
+    }
+    
+    // Use random stagger origin for high performance
+    const origins = ["center", "end", "edges", "random", "start"];
+    return origins[Math.floor(Math.random() * origins.length)];
+  }
+  
+  /**
+   * Shutdown the animation controller
+   */
+  shutdown() {
+    if (!this.isInitialized) {
+      return;
+    }
+    
+    console.log('Shutting down AnimationController');
+    
+    // Clear callbacks
+    this.performanceCallbacks = [];
+    this.visibilityCallbacks = [];
+    
+    // Reset state
+    this.isInitialized = false;
+    
+    console.log('AnimationController shutdown complete');
+  }
+}
+
+    /**
+ * Manages the responsive layout for the visualization
+ */
+class ResponsiveLayout {
+  /**
+   * Create a new ResponsiveLayout
+   * @param {string} containerSelector - Container element selector
+   * @param {string} svgSelector - SVG element selector
+   */
+  constructor(containerSelector, svgSelector) {
+    this.container = document.querySelector(containerSelector);
+    this.svg = document.querySelector(svgSelector);
+    
+    // Check if elements exist
+    if (!this.container || !this.svg) {
+      console.error('ResponsiveLayout: Container or SVG element not found');
+      return;
+    }
+    
+    // Set correct viewBox for the SVG
+    this.updateViewBox('0 0 576 576');
+    
+    // Setup resize handler
+    window.addEventListener('resize', this.handleResize.bind(this));
+    
+    // Initial sizing
+    this.handleResize();
+  }
+  
+  /**
+   * Update the SVG viewBox
+   * @param {string} viewBox - The viewBox value
+   */
+  updateViewBox(viewBox) {
+    if (this.svg) {
+      this.svg.setAttribute('viewBox', viewBox);
+      console.log(`Updated SVG viewBox to ${viewBox}`);
+    }
+  }
+  
+  /**
+   * Handle window resize
+   */
+  handleResize() {
+    if (!this.container || !this.svg) return;
+    
+    const containerWidth = this.container.clientWidth;
+    const containerHeight = this.container.clientHeight;
+    
+    // Determine constraining dimension (for square aspect ratio)
+    let width, height;
+    if (containerWidth < containerHeight) {
+      // Width constrained
+      width = containerWidth;
+      height = width;
+    } else {
+      // Height constrained
+      height = containerHeight;
+      width = height;
+    }
+    
+    // Apply sizing to SVG
+    this.svg.style.width = `${width}px`;
+    this.svg.style.height = `${height}px`;
+    
+    // Center SVG in container
+    this.svg.style.position = 'absolute';
+    this.svg.style.left = `${(containerWidth - width) / 2}px`;
+    this.svg.style.top = `${(containerHeight - height) / 2}px`;
+    
+    console.log(`Resized SVG to ${width}x${height}`);
+  }
+  
+  /**
+   * Set a custom size for the SVG
+   * @param {number} width - Width in pixels
+   * @param {number} height - Height in pixels
+   */
+  setSize(width, height) {
+    if (this.svg) {
+      this.svg.style.width = `${width}px`;
+      this.svg.style.height = `${height}px`;
+      
+      // Center SVG in container
+      if (this.container) {
+        const containerWidth = this.container.clientWidth;
+        const containerHeight = this.container.clientHeight;
+        
+        this.svg.style.position = 'absolute';
+        this.svg.style.left = `${(containerWidth - width) / 2}px`;
+        this.svg.style.top = `${(containerHeight - height) / 2}px`;
+      }
+      
+      console.log(`Set SVG size to ${width}x${height}`);
+    }
+  }
+}
+
+    class ErrorHandler {
+  constructor(visualization) {
+    this.visualization = visualization;
+    this.errorCount = 0;
+    this.lastErrorTime = 0;
+    this.maxErrorsPerMinute = 5;
+  }
+  
+  handleError(error, component, isCritical = false) {
+    // Log error
+    console.error(`Error in ${component}:`, error);
+    
+    // Track error frequency
+    const now = Date.now();
+    if (now - this.lastErrorTime > 60000) {
+      // Reset counter after a minute
+      this.errorCount = 1;
+    } else {
+      this.errorCount++;
+    }
+    this.lastErrorTime = now;
+    
+    // Check if we're seeing too many errors
+    if (this.errorCount > this.maxErrorsPerMinute || isCritical) {
+      this.enableFallbackMode();
+    }
+    
+    // Update UI to show error state
+    this.updateErrorUI(component, isCritical);
+    
+    return isCritical; // Return if error was critical
+  }
+  
+  enableFallbackMode() {
+    // Switch to simplified visualization
+    console.warn("Too many errors - switching to fallback mode");
+    
+    if (this.visualization.mainTimeline) {
+      this.visualization.mainTimeline.kill();
+    }
+    
+    // Clear existing content
+    if (this.visualization.svgContainer) {
+      // Keep container but clear content
+      while (this.visualization.svgContainer.firstChild) {
+        this.visualization.svgContainer.removeChild(this.visualization.svgContainer.firstChild);
+      }
+    }
+    
+    // Create simple fallback display
+    this.createFallbackDisplay();
+  }
+  
+  createFallbackDisplay() {
+    const svgContainer = this.visualization.svgContainer;
+    
+    // Add a background
+    const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    background.setAttribute("width", "100%");
+    background.setAttribute("height", "100%");
+    background.setAttribute("fill", "#000");
+    svgContainer.appendChild(background);
+    
+    // Add simple block information text
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", "50%");
+    text.setAttribute("y", "50%");
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("dominant-baseline", "middle");
+    text.setAttribute("fill", "#fff");
+    text.setAttribute("font-family", "monospace");
+    text.setAttribute("font-size", "16");
+    
+    if (this.visualization.blockMemory && this.visualization.blockMemory.length > 0) {
+      // Show latest block info
+      const latestBlock = this.visualization.blockMemory[0];
+      text.textContent = `Block #${latestBlock.height} | ${new Date(latestBlock.time * 1000).toLocaleTimeString()}`;
+    } else {
+      text.textContent = "Blockchain Visualization";
+    }
+    
+    svgContainer.appendChild(text);
+    
+    // Add a subtle animation to show system is still responsive
+    gsap.to(text, {
+      opacity: 0.7,
+      duration: 1,
+      repeat: -1,
+      yoyo: true
+    });
+  }
+  
+  updateErrorUI(component, isCritical) {
+    // Update info overlay to show error status
+    const infoOverlay = this.visualization.infoOverlay;
+    if (!infoOverlay) return;
+    
+    const currentContent = infoOverlay.innerHTML;
+    
+    // Add error indicator
+    const errorDiv = document.createElement('div');
+    errorDiv.style.color = isCritical ? '#ff5555' : '#ffaa55';
+    errorDiv.textContent = isCritical 
+      ? `Error in ${component}. Using fallback mode.` 
+      : `Warning in ${component}. Continuing with limited features.`;
+    
+    // Add to existing content
+    infoOverlay.appendChild(errorDiv);
+    
+    // Make overlay visible
+    gsap.to(infoOverlay, {
+      opacity: 0.9,
+      duration: 0.3
+    });
+    
+    // Auto-hide after 5 seconds
+    gsap.to(infoOverlay, {
+      opacity: 0,
+      duration: 0.3,
+      delay: 5
+    });
+  }
+}
+
+    
+  </script>
+  
+  <script>
+    // Initialize on DOM content loaded
+document.addEventListener('DOMContentLoaded', () => {
+  // Create and store app instance
+  window.merkleMemory = new MerkleMemoryApp();
+});
+  </script>
+</body>
+</html>
